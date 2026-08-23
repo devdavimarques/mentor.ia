@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/* Tokens de design expostos como utilitários do Tailwind:
+   --color-gold  →  text-gold / bg-gold / border-gold, etc. */
+@theme {
+  --color-ink: #12161a;
+  --color-surface: #1b2126;
+  --color-surface-alt: #212930;
+  --color-line: #2c363e;
+  --color-parchment: #edeae0;
+  --color-muted: #94a0aa;
+  --color-gold: #d4a73a;
+  --color-gold-dim: #8a7127;
+  --color-brick: #b4453d;
+  --color-moss: #5a8c6e;
+
+  --font-display: Georgia, "Times New Roman", Times, serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Courier New", monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-parchment);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-muted);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+}
