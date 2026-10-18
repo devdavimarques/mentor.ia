@@ -1,86 +1,148 @@
 "use client";
 
-import { useState } from "react";
+import { X } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
-import { TabNav } from "@/components/tab-nav";
+import { QuestionsProvider } from "@/components/questions-context";
+import { TabBar, TabNav } from "@/components/tab-nav";
 import { ProgressTab } from "@/components/tabs/progress-tab";
 import { SettingsTab } from "@/components/tabs/settings-tab";
 import { SubjectsTab } from "@/components/tabs/subjects-tab";
 import { TodayTab } from "@/components/tabs/today-tab";
 import { WeekTab } from "@/components/tabs/week-tab";
 import { useStudyCycle } from "@/hooks/use-study-cycle";
-import type { TabId } from "@/lib/types";
+import type { Profile, StudyState, TabId } from "@/lib/types";
 
-export function StudyCycle() {
-  const [tab, setTab] = useState<TabId>("hoje");
+interface StudyCycleProps {
+  profile: Profile;
+  /** Estado já carregado do banco no servidor — a tela abre pronta. */
+  initialState: StudyState;
+  /** Hoje no fuso do app, `yyyy-mm-dd`, resolvido no servidor. */
+  todayDate: string;
+}
+
+export function StudyCycle({ profile, initialState, todayDate }: StudyCycleProps) {
+  const [tab, setTabState] = useState<TabId>("hoje");
+  // No celular a página rola inteira: trocar de aba volta ao topo dela.
+  const setTab = (next: TabId) => {
+    setTabState(next);
+    if (window.scrollY > 0) window.scrollTo({ top: 0 });
+  };
   const {
-    ready,
     state,
     today,
     todayIso,
     todayBlocks,
     weekProgress,
-    toggleTopic,
+    studied,
+    lessons,
+    manual,
+    checked,
+    reviews,
+    saving,
+    error,
+    dismissError,
+    toggleBlock,
+    toggleTopicStudied,
+    toggleReview,
+    addQuestions,
+    deleteQuestions,
     toggleDay,
     setBlocksPerDay,
-  } = useStudyCycle();
+    setWeight,
+    resetWeights,
+  } = useStudyCycle(initialState, todayDate);
 
-  if (!ready || today === null || todayIso === null) {
-    return (
-      <div className="text-muted flex h-96 items-center justify-center font-mono">
-        carregando ciclo...
-      </div>
-    );
-  }
+  const questionsApi = useMemo(
+    () => ({ logs: state.questionLogs, add: addQuestions, remove: deleteQuestions }),
+    [state.questionLogs, addQuestions, deleteQuestions],
+  );
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <AppHeader weekProgress={weekProgress} />
-      <TabNav active={tab} onChange={setTab} />
+    <QuestionsProvider value={questionsApi}>
+      <div className="bg-frame border-line mx-auto min-h-dvh w-full max-w-6xl sm:my-6 sm:min-h-0 sm:rounded-3xl sm:border sm:shadow-2xl sm:shadow-black/20">
+        <AppHeader
+          profile={profile}
+          saving={saving}
+          nav={<TabNav active={tab} onChange={setTab} />}
+        />
 
-      <div
-        id={`panel-${tab}`}
-        role="tabpanel"
-        aria-labelledby={`tab-${tab}`}
-        tabIndex={-1}
-        className="p-6"
-      >
-        {tab === "hoje" && (
-          <TodayTab
-            today={today}
-            todayIso={todayIso}
-            blocks={todayBlocks}
-            completed={state.completed}
-            onToggleTopic={toggleTopic}
-          />
+        {error && (
+          <div
+            role="alert"
+            className="border-danger/40 bg-danger/10 mx-4 mt-4 flex items-start gap-3 rounded-xl border px-4 py-3 text-sm sm:mx-6"
+          >
+            <span className="flex-1">{error}</span>
+            <button
+              type="button"
+              onClick={dismissError}
+              className="text-muted hover:text-ink shrink-0"
+              aria-label="Fechar aviso"
+            >
+              <X size={16} />
+            </button>
+          </div>
         )}
 
-        {tab === "semana" && state.week && (
-          <WeekTab
-            week={state.week}
-            todayIso={todayIso}
-            completed={state.completed}
-            onToggleTopic={toggleTopic}
-          />
-        )}
+        <div
+          id={`panel-${tab}`}
+          role="tabpanel"
+          aria-labelledby={`tab-${tab}`}
+          tabIndex={-1}
+          // Espaço para a barra de abas do rodapé, que só existe abaixo de `lg`.
+          className="p-4 pb-28 sm:p-6 sm:pb-28 lg:pb-6"
+        >
+          {tab === "hoje" && (
+            <TodayTab
+              today={today}
+              todayDate={todayDate}
+              todayIso={todayIso}
+              blocks={todayBlocks}
+              week={state.week}
+              weekProgress={weekProgress}
+              studied={studied}
+              checked={checked}
+              reviews={reviews}
+              onToggleBlock={toggleBlock}
+              onToggleReview={toggleReview}
+            />
+          )}
 
-        {tab === "materias" && (
-          <SubjectsTab completed={state.completed} onToggleTopic={toggleTopic} />
-        )}
+          {tab === "semana" && state.week && (
+            <WeekTab
+              week={state.week}
+              todayIso={todayIso}
+              weekProgress={weekProgress}
+              checked={checked}
+              onToggleBlock={toggleBlock}
+            />
+          )}
 
-        {tab === "progresso" && (
-          <ProgressTab completed={state.completed} pointers={state.pointers} />
-        )}
+          {tab === "materias" && (
+            <SubjectsTab
+              studied={studied}
+              lessons={lessons}
+              manual={manual}
+              onToggleTopic={toggleTopicStudied}
+            />
+          )}
 
-        {tab === "config" && (
-          <SettingsTab
-            settings={state.settings}
-            onToggleDay={toggleDay}
-            onSetBlocksPerDay={setBlocksPerDay}
-          />
-        )}
+          {tab === "progresso" && <ProgressTab studied={studied} lessons={lessons} pointers={state.pointers} />}
+
+          {tab === "config" && (
+            <SettingsTab
+              settings={state.settings}
+              onToggleDay={toggleDay}
+              onSetBlocksPerDay={setBlocksPerDay}
+              onSetWeight={setWeight}
+              onResetWeights={resetWeights}
+            />
+          )}
+        </div>
       </div>
-    </div>
+
+      <TabBar active={tab} onChange={setTab} />
+    </QuestionsProvider>
   );
 }

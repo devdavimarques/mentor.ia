@@ -16,35 +16,38 @@ interface SlotAllocation {
  * toda semana nas mesmas matérias. O erro acumula em vez de se compensar.
  *
  * Aqui cada bloco vai para a matéria com o maior *déficit* em relação ao que
- * ela já deveria ter recebido desde o início. Uma matéria que ficou para trás
- * numa semana entra na frente na seguinte, então a proporção acumulada
- * converge para os pesos do edital.
+ * ela já deveria ter recebido desde que os pesos valem. Uma matéria que ficou
+ * para trás numa semana entra na frente na seguinte, então a proporção
+ * acumulada converge para os pesos.
+ *
+ * Matéria com peso 0 fica fora: pela conta do déficit ela ainda poderia ganhar
+ * um bloco quando as outras ficassem negativas.
  */
 function allocateSlots(
   subjects: readonly Subject[],
+  weights: Readonly<Record<string, number>>,
   totalSlots: number,
   delivered: Pointers,
 ): SlotAllocation[] {
-  if (subjects.length === 0 || totalSlots <= 0) return [];
+  const active = subjects.filter((s) => (weights[s.id] ?? 0) > 0);
+  if (active.length === 0 || totalSlots <= 0) return [];
 
-  const totalWeight = subjects.reduce((sum, s) => sum + s.weight, 0);
-  if (totalWeight <= 0) return subjects.map((s) => ({ id: s.id, count: 0 }));
-
-  const deliveredTotal = subjects.reduce((sum, s) => sum + (delivered[s.id] ?? 0), 0);
+  const totalWeight = active.reduce((sum, s) => sum + weights[s.id], 0);
+  const deliveredTotal = active.reduce((sum, s) => sum + (delivered[s.id] ?? 0), 0);
   const horizon = deliveredTotal + totalSlots;
 
-  const allocations = subjects.map((s) => ({
+  const allocations = active.map((s) => ({
     id: s.id,
     count: 0,
     // Quantos blocos faltam para a matéria alcançar sua fatia do total ao
     // fim desta semana. Negativo significa que ela já veio adiantada.
-    deficit: (s.weight / totalWeight) * horizon - (delivered[s.id] ?? 0),
+    deficit: (weights[s.id] / totalWeight) * horizon - (delivered[s.id] ?? 0),
   }));
 
   for (let slot = 0; slot < totalSlots; slot++) {
     let pick = allocations[0];
-    // `>` estrito: empates ficam com a matéria de maior peso (ordem do edital),
-    // e o déficit negativo resultante passa a vez na próxima disputa.
+    // `>` estrito: empates ficam com a matéria que vem antes no edital, e o
+    // déficit negativo resultante passa a vez na próxima disputa.
     for (const entry of allocations) {
       if (entry.deficit > pick.deficit) pick = entry;
     }
@@ -61,7 +64,7 @@ function allocateSlots(
  *
  * Usado ao regerar a semana atual (troca de dias ou de blocos por dia): sem
  * isso a semana descartada continuaria contando como entregue, os ponteiros
- * saltariam e o usuário pularia tópicos que nunca viu.
+ * saltariam e o usuário pularia aulas que nunca viu.
  */
 export function pointersBeforeWeek(pointers: Pointers, week: WeekSchedule | null): Pointers {
   const base: Pointers = { ...pointers };
@@ -105,7 +108,7 @@ export interface GeneratedWeek {
 /**
  * Monta o cronograma da semana a partir das configurações e dos ponteiros de
  * cada matéria (quantos blocos já foram entregues a ela). Os ponteiros servem
- * a dois propósitos: apontam o próximo tópico — virando para a 2ª, 3ª… volta
+ * a dois propósitos: apontam a próxima aula — virando para a 2ª, 3ª… volta
  * quando a lista acaba — e são o histórico que equilibra a distribuição por
  * peso ao longo das semanas.
  *
@@ -125,7 +128,17 @@ export function generateWeek(
     return { week: { weekStart, days: [] }, pointers: { ...pointers } };
   }
 
-  const assignment = spreadSlots(allocateSlots(SUBJECTS, totalSlots, pointers), totalSlots);
+  // O equilíbrio conta só o que foi entregue desde a última troca de pesos.
+  const delivered: Pointers = {};
+  for (const subject of SUBJECTS) {
+    const since = (pointers[subject.id] ?? 0) - (settings.weightBase[subject.id] ?? 0);
+    delivered[subject.id] = Math.max(0, since);
+  }
+
+  const assignment = spreadSlots(
+    allocateSlots(SUBJECTS, settings.weights, totalSlots, delivered),
+    totalSlots,
+  );
 
   const nextPointers: Pointers = { ...pointers };
   const days: ScheduledDay[] = activeDays.map((day) => ({ day, blocks: [] }));
@@ -137,12 +150,38 @@ export function generateWeek(
 
     days[Math.floor(index / blocksPerDay)].blocks.push({
       subjectId,
-      topicIndex: pointer % subject.topics.length,
-      lap: Math.floor(pointer / subject.topics.length) + 1,
+      lessonIndex: pointer % subject.lessons.length,
+      lap: Math.floor(pointer / subject.lessons.length) + 1,
     });
 
     nextPointers[subjectId] = pointer + 1;
   });
 
   return { week: { weekStart, days }, pointers: nextPointers };
+}
+
+function sameWeights(a: Readonly<Record<string, number>>, b: Readonly<Record<string, number>>) {
+  return SUBJECTS.every((s) => (a[s.id] ?? 0) === (b[s.id] ?? 0));
+}
+
+/**
+ * Aplica novas configurações à semana atual: descarta o cronograma dela e gera
+ * outro. Se os pesos mudaram, o equilíbrio recomeça daqui (`weightBase`).
+ *
+ * É a mesma função no servidor (que grava) e no cliente (que mostra na hora),
+ * então os dois chegam ao mesmo cronograma. `weightBase` vem sempre do estado
+ * anterior, nunca do que o navegador mandou.
+ */
+export function regenerateWeek(
+  previous: { settings: Settings; pointers: Pointers; week: WeekSchedule | null },
+  requested: Settings,
+  weekStart: string,
+): { settings: Settings; pointers: Pointers; week: WeekSchedule } {
+  const base = pointersBeforeWeek(previous.pointers, previous.week);
+  const weightBase = sameWeights(previous.settings.weights, requested.weights)
+    ? previous.settings.weightBase
+    : base;
+  const settings: Settings = { ...requested, weightBase };
+  const { week, pointers } = generateWeek(settings, base, weekStart);
+  return { settings, pointers, week };
 }

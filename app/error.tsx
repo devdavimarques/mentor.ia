@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+import { LogoMark } from "@/components/ui/logo";
+
 export default function ErrorBoundary({
   error,
   reset,
@@ -15,15 +17,15 @@ export default function ErrorBoundary({
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
-      <h1 className="font-display text-2xl font-bold">Algo deu errado</h1>
+      <LogoMark size={40} />
+      <h1 className="text-2xl font-extrabold tracking-tight">Algo deu errado</h1>
       <p className="text-muted max-w-md text-sm">
-        Não foi possível carregar o ciclo. Tente novamente — seu progresso continua salvo neste
-        navegador.
+        Não foi possível carregar o ciclo. Tente novamente: seu progresso continua salvo.
       </p>
       <button
         type="button"
         onClick={reset}
-        className="border-gold text-gold hover:bg-gold/10 rounded border px-4 py-2 font-mono text-xs tracking-wide uppercase transition-colors"
+        className="bg-accent text-on-accent hover:bg-accent-hover rounded-xl px-5 py-2.5 text-sm font-bold transition-colors"
       >
         Tentar novamente
       </button>

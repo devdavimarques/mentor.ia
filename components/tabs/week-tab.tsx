@@ -1,58 +1,80 @@
 "use client";
 
-import { TopicBlock } from "@/components/topic-block";
+import { LessonBlock } from "@/components/topic-block";
+import { ProgressBar } from "@/components/ui/progress-bar";
 import { dateOfWeekday, formatShortDate } from "@/lib/date";
-import { isTopicDone } from "@/lib/progress";
+import { blockKey, type Progress } from "@/lib/progress";
 import { DAY_LABELS } from "@/lib/subjects";
-import type { CompletedMap, WeekSchedule } from "@/lib/types";
+import type { ScheduledBlock, WeekSchedule } from "@/lib/types";
 
 interface WeekTabProps {
   week: WeekSchedule;
   todayIso: number | null;
-  completed: CompletedMap;
-  onToggleTopic: (subjectId: string, topicIndex: number) => void;
+  weekProgress: Progress;
+  checked: ReadonlySet<string>;
+  onToggleBlock: (block: ScheduledBlock) => void;
 }
 
-export function WeekTab({ week, todayIso, completed, onToggleTopic }: WeekTabProps) {
+export function WeekTab({ week, todayIso, weekProgress, checked, onToggleBlock }: WeekTabProps) {
   if (week.days.length === 0) {
     return (
-      <div className="bg-surface border-line text-muted rounded border border-dashed p-6 text-center">
+      <div className="border-line text-muted rounded-2xl border border-dashed p-6 text-center text-sm">
         Nenhum dia de estudo selecionado. Escolha os dias na aba{" "}
-        <span className="text-parchment">Configurar</span>.
+        <span className="text-ink font-semibold">Configurar</span>.
       </div>
     );
   }
 
   return (
-    <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(230px,1fr))]">
-      {week.days.map((day) => {
-        const isToday = day.day === todayIso;
-        return (
-          <div key={day.day}>
-            <div
-              className={`border-line mb-2 flex items-baseline justify-between border-b pb-1 font-mono text-xs tracking-widest uppercase ${
-                isToday ? "text-gold" : "text-muted"
-              }`}
-            >
-              <span>
-                {DAY_LABELS[day.day - 1]} {isToday && "· hoje"}
-              </span>
-              <span className="normal-case">{formatShortDate(dateOfWeekday(week.weekStart, day.day))}</span>
-            </div>
+    <div>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-accent-text text-xs font-semibold tracking-wider uppercase">
+            Semana de {formatShortDate(dateOfWeekday(week.weekStart, 1))}
+          </p>
+          <h1 className="mt-1 text-3xl font-extrabold tracking-tight">Cronograma da semana</h1>
+        </div>
+        <div className="w-full sm:max-w-56">
+          <p className="text-muted mb-1.5 text-right text-xs font-medium tabular-nums">
+            {weekProgress.done} de {weekProgress.total} blocos
+          </p>
+          <ProgressBar value={weekProgress.pct} label="Blocos estudados na semana" />
+        </div>
+      </div>
 
-            <div className="flex flex-col gap-2">
-              {day.blocks.map((block, index) => (
-                <TopicBlock
-                  key={`${block.subjectId}:${block.topicIndex}:${index}`}
-                  block={block}
-                  completed={isTopicDone(completed, block.subjectId, block.topicIndex)}
-                  onToggle={() => onToggleTopic(block.subjectId, block.topicIndex)}
-                />
-              ))}
+      <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(230px,1fr))]">
+        {week.days.map((day) => {
+          const isToday = day.day === todayIso;
+          return (
+            <div key={day.day}>
+              <div
+                className={`mb-3 flex items-baseline justify-between border-b-2 pb-1.5 text-sm font-bold ${
+                  isToday ? "border-accent text-accent-text" : "border-line text-muted"
+                }`}
+              >
+                <span>
+                  {DAY_LABELS[day.day - 1]}
+                  {isToday && " · hoje"}
+                </span>
+                <span className="text-xs font-medium tabular-nums">
+                  {formatShortDate(dateOfWeekday(week.weekStart, day.day))}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {day.blocks.map((block) => (
+                  <LessonBlock
+                    key={`${block.subjectId}:${block.lessonIndex}:${block.lap}`}
+                    block={block}
+                    checked={checked.has(blockKey(week.weekStart, block))}
+                    onToggle={() => onToggleBlock(block)}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

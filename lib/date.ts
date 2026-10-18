@@ -44,3 +44,31 @@ export function dateOfWeekday(weekStart: string, day: number): Date {
 export function formatShortDate(date: Date): string {
   return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
+
+/** Formato por extenso usado em títulos: `17 de outubro`. */
+export function formatLongDate(date: Date): string {
+  return date.toLocaleDateString("pt-BR", { day: "numeric", month: "long" });
+}
+
+/**
+ * Fuso do app. O servidor da Vercel roda em UTC, então `new Date()` lá vira
+ * outro dia (e às vezes outra semana) em relação a quem está na Bahia. Fixar o
+ * fuso faz servidor e navegador concordarem sobre que dia é hoje — sem isso, a
+ * aba "Hoje" mostraria o dia errado durante a madrugada.
+ */
+export const APP_TIME_ZONE = "America/Bahia";
+
+/** Data de hoje no fuso do app, como `yyyy-mm-dd`. `en-CA` já formata assim. */
+export function todayIsoDate(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+/** Segunda-feira da semana corrente, no fuso do app, como `yyyy-mm-dd`. */
+export function currentWeekStart(): string {
+  return toIsoDate(startOfIsoWeek(fromIsoDate(todayIsoDate())));
+}

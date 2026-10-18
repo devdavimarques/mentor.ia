@@ -13,10 +13,10 @@ export function ProgressBar({ value, label }: ProgressBarProps) {
       aria-valuemin={0}
       aria-valuemax={100}
       aria-label={label}
-      className="bg-surface-alt h-1.5 w-full overflow-hidden rounded-full"
+      className="bg-surface-alt h-2 w-full overflow-hidden rounded-full"
     >
       <div
-        className="bg-gold h-full rounded-full transition-[width] duration-300"
+        className="bg-accent h-full rounded-full transition-[width] duration-300"
         style={{ width: `${clamped}%` }}
       />
     </div>

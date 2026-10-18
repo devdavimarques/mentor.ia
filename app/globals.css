@@ -1,33 +1,95 @@
 @import "tailwindcss";
 
-/* Tokens de design expostos como utilitários do Tailwind:
-   --color-gold  →  text-gold / bg-gold / border-gold, etc. */
-@theme {
-  --color-ink: #12161a;
-  --color-surface: #1b2126;
-  --color-surface-alt: #212930;
-  --color-line: #2c363e;
-  --color-parchment: #edeae0;
-  --color-muted: #94a0aa;
-  --color-gold: #d4a73a;
-  --color-gold-dim: #8a7127;
-  --color-brick: #b4453d;
-  --color-moss: #5a8c6e;
+/* Identidade "Azul de missão" — referência completa em DESIGN.md.
 
-  --font-display: Georgia, "Times New Roman", Times, serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Courier New", monospace;
+   As cores vivem em variáveis CSS que trocam com o tema do sistema (escuro é o
+   padrão). O bloco `@theme inline` expõe cada uma como utilitário do Tailwind:
+   --color-accent  →  bg-accent / text-accent / border-accent, etc. */
+:root {
+  color-scheme: dark;
+  --bg: #070b17;
+  --frame: #0d1324;
+  --surface: #131b30;
+  --surface-alt: #1a2440;
+  --line: #25304d;
+  --ink: #f2f5fa;
+  --muted: #95a0b8;
+  --accent: #1747e0;
+  --accent-hover: #2a5bf2;
+  --accent-text: #7a9bff;
+  --accent-soft: rgb(23 71 224 / 0.16);
+  --on-accent: #ffffff;
+  --success: #34d399;
+  --danger: #f47a6b;
+  --hero: #0a1a4f;
+  --glow-a: rgb(23 71 224 / 0.38);
+  --glow-b: rgb(59 164 255 / 0.18);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #e9edf6;
+    --frame: #f6f8fc;
+    --surface: #ffffff;
+    --surface-alt: #eef2f9;
+    --line: #dfe5f0;
+    --ink: #0e1525;
+    --muted: #5b6478;
+    --accent: #1747e0;
+    --accent-hover: #0f3bc4;
+    --accent-text: #1747e0;
+    --accent-soft: #e7edff;
+    --on-accent: #ffffff;
+    --success: #0e9f6e;
+    --danger: #c2412f;
+    --glow-a: rgb(23 71 224 / 0.16);
+    --glow-b: rgb(59 164 255 / 0.12);
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-frame: var(--frame);
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-hero: var(--hero);
+
+  /* Variáveis criadas pelo next/font em app/layout.tsx. */
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 @layer base {
-  html {
-    color-scheme: dark;
-  }
-
   body {
-    background-color: var(--color-ink);
-    color: var(--color-parchment);
+    background-color: var(--bg);
+    color: var(--ink);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Brilho azul desfocado atrás do app — a assinatura visual da identidade.
+     Fica numa camada fixa própria em vez de `background-attachment: fixed`,
+     que força o navegador a repintar a página inteira a cada rolagem. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      radial-gradient(42rem circle at 0% 0%, var(--glow-a), transparent 60%),
+      radial-gradient(38rem circle at 100% 100%, var(--glow-b), transparent 60%);
   }
 
   ::-webkit-scrollbar {
@@ -38,15 +100,23 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--color-line);
+    background: var(--line);
     border-radius: 4px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-muted);
+    background: var(--muted);
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-gold);
+    outline: 2px solid var(--accent-text);
     outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+    }
   }
 }
