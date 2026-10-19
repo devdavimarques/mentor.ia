@@ -151,6 +151,11 @@ export interface Profile {
   name: string;
 }
 
+/** Perfil na tela de entrada: só se tem senha, nunca o hash. */
+export interface ProfileOption extends Profile {
+  hasPassword: boolean;
+}
+
 /** O que a geração de uma semana produz e o que é persistido junto. */
 export interface ScheduleSnapshot {
   settings: Settings;

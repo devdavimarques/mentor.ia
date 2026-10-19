@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "db:seed": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/seed-profiles.mjs"
+    "db:seed": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/seed-profiles.mjs",
+    "db:password": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/set-password.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",

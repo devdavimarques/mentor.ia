@@ -87,8 +87,15 @@ function replaceLog(optimistic: StudyLog) {
  *
  * `todayDate` vem do servidor já resolvido no fuso do app, então cliente e
  * servidor nunca discordam sobre que dia é hoje.
+ *
+ * Com `persist` falso (visitante), as alterações ficam só na tela: nada é
+ * enviado, e recarregar a página volta ao ciclo de exemplo.
  */
-export function useStudyCycle(initialState: StudyState, todayDate: string): StudyCycle {
+export function useStudyCycle(
+  initialState: StudyState,
+  todayDate: string,
+  persist = true,
+): StudyCycle {
   const [state, setState] = useState<StudyState>(initialState);
   const [error, setError] = useState<string | null>(null);
   const [saving, startTransition] = useTransition();
@@ -118,6 +125,7 @@ export function useStudyCycle(initialState: StudyState, todayDate: string): Stud
     ) => {
       update(apply(stateRef.current));
       setError(null);
+      if (!persist) return;
 
       startTransition(async () => {
         const result = await request();
@@ -129,7 +137,7 @@ export function useStudyCycle(initialState: StudyState, todayDate: string): Stud
         if (reconcile) update(reconcile(stateRef.current, result.data));
       });
     },
-    [update],
+    [update, persist],
   );
 
   const toggleBlock = useCallback(
@@ -242,8 +250,10 @@ export function useStudyCycle(initialState: StudyState, todayDate: string): Stud
 
   const addQuestions = useCallback(
     (subjectId: string, topicIndex: number, answered: number, correct: number) => {
+      // Visitante nunca recebe id do banco: o lançamento já nasce definitivo
+      // (com prefixo de "pendente" o botão de apagar ficaria desativado).
       const optimistic: QuestionLog = {
-        id: `${PENDING_ID_PREFIX}${++pendingIds.current}`,
+        id: `${persist ? PENDING_ID_PREFIX : "local-"}${++pendingIds.current}`,
         subjectId,
         topicIndex,
         answered,
@@ -260,7 +270,7 @@ export function useStudyCycle(initialState: StudyState, todayDate: string): Stud
         }),
       );
     },
-    [mutate, todayDate],
+    [mutate, todayDate, persist],
   );
 
   const deleteQuestions = useCallback(

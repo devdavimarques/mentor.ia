@@ -1,17 +1,39 @@
 import "server-only";
 
 import { currentWeekStart } from "./date";
-import { findProfile } from "./db/profiles";
+import { findProfileCredentials } from "./db/profiles";
 import { loadStudyState, saveSchedule } from "./db/study-state";
 import { generateWeek } from "./schedule";
-import { readProfileId } from "./session";
+import { readSession, sessionMatches } from "./session";
+import { parseSettings } from "./state-schema";
 import type { Profile, StudyState } from "./types";
 
-/** Perfil da sessão, ou `null` se não há cookie ou o perfil sumiu do banco. */
+export type Session = { kind: "profile"; profile: Profile } | { kind: "guest" };
+
+/**
+ * Sessão corrente, já conferida. Perfil só vale se a assinatura do cookie bate
+ * com o hash de senha atual — cookie forjado, de senha antiga ou de perfil
+ * sem senha cai aqui como "sem sessão".
+ */
+export async function currentSession(): Promise<Session | null> {
+  const stored = await readSession();
+  if (!stored) return null;
+  if (stored.kind === "guest") return { kind: "guest" };
+
+  const found = await findProfileCredentials(stored.profileId);
+  if (!found?.passwordHash) return null;
+  if (!sessionMatches(stored.profileId, stored.signature, found.passwordHash)) return null;
+  return { kind: "profile", profile: found.profile };
+}
+
+/**
+ * Perfil da sessão, ou `null` — inclusive para visitante. É o que toda Server
+ * Action de gravação usa, então visitante nunca escreve no banco, mesmo que
+ * chame a action direto.
+ */
 export async function currentProfile(): Promise<Profile | null> {
-  const profileId = await readProfileId();
-  if (!profileId) return null;
-  return findProfile(profileId);
+  const session = await currentSession();
+  return session?.kind === "profile" ? session.profile : null;
 }
 
 /**
@@ -29,4 +51,11 @@ export async function loadCurrentCycle(profileId: string): Promise<StudyState> {
   const { week, pointers } = generateWeek(state.settings, state.pointers, weekStart);
   await saveSchedule(profileId, { settings: state.settings, pointers, week });
   return { ...state, week, pointers };
+}
+
+/** Ciclo do visitante: o padrão, do zero, gerado a cada visita e nunca salvo. */
+export function guestCycle(): StudyState {
+  const settings = parseSettings(null);
+  const { week, pointers } = generateWeek(settings, {}, currentWeekStart());
+  return { settings, pointers, week, studyLogs: [], reviewLogs: [], questionLogs: [] };
 }

@@ -13,7 +13,7 @@ import {
   unmarkBlock,
   unmarkReview,
 } from "@/lib/db/logs";
-import { findProfile } from "@/lib/db/profiles";
+import { findProfileCredentials } from "@/lib/db/profiles";
 import { loadStudyState, saveSchedule } from "@/lib/db/study-state";
 import { questionLogError } from "@/lib/questions";
 import { isReviewStage } from "@/lib/reviews";
@@ -26,7 +26,8 @@ import {
   isUuid,
   parseSettings,
 } from "@/lib/state-schema";
-import { clearProfileId, isProfileId, writeProfileId } from "@/lib/session";
+import { verifyPassword } from "@/lib/password";
+import { clearSession, isProfileId, writeGuestSession, writeProfileSession } from "@/lib/session";
 import { currentProfile } from "@/lib/study-session";
 import type {
   BlockRef,
@@ -40,7 +41,8 @@ export type ActionResult<T = null> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
-const SESSION_EXPIRED = "Sessão encerrada. Escolha o perfil novamente.";
+/** Também é o que o visitante recebe: `currentProfile()` não devolve perfil para ele. */
+const SESSION_EXPIRED = "Sessão encerrada. Entre no perfil novamente.";
 
 /**
  * Server Actions são endpoints HTTP públicos: tudo que chega aqui é tratado
@@ -54,16 +56,34 @@ function fail(context: string, error: unknown): { ok: false; error: string } {
   return { ok: false, error: "Não foi possível salvar. Verifique a conexão e tente de novo." };
 }
 
-/** Escolhe o perfil da sessão. Sem senha: o cookie apenas registra a escolha. */
-export async function selectProfileAction(profileId: string): Promise<ActionResult | void> {
+/** Atraso em senha errada: torna tentativa em massa lenta sem incomodar quem errou uma vez. */
+const WRONG_PASSWORD_DELAY_MS = 600;
+const MAX_PASSWORD_LENGTH = 200;
+
+/** Entra num perfil depois de conferir a senha. Em caso de sucesso, redireciona. */
+export async function signInAction(
+  profileId: string,
+  password: string,
+): Promise<ActionResult | void> {
   if (!isProfileId(profileId)) return { ok: false, error: "Perfil inválido." };
+  if (typeof password !== "string" || password.length === 0) {
+    return { ok: false, error: "Digite a senha." };
+  }
+  if (password.length > MAX_PASSWORD_LENGTH) return { ok: false, error: "Senha incorreta." };
 
   try {
-    const profile = await findProfile(profileId);
-    if (!profile) return { ok: false, error: "Esse perfil não existe mais." };
-    await writeProfileId(profile.id);
+    const found = await findProfileCredentials(profileId);
+    if (!found) return { ok: false, error: "Esse perfil não existe mais." };
+    if (!found.passwordHash) {
+      return { ok: false, error: "Este perfil ainda não tem senha definida." };
+    }
+    if (!(await verifyPassword(password, found.passwordHash))) {
+      await new Promise((r) => setTimeout(r, WRONG_PASSWORD_DELAY_MS));
+      return { ok: false, error: "Senha incorreta." };
+    }
+    await writeProfileSession(found.profile.id, found.passwordHash);
   } catch (error) {
-    return fail("selectProfile", error);
+    return fail("signIn", error);
   }
 
   // Fora do try: `redirect` funciona lançando uma exceção interna do Next,
@@ -71,8 +91,14 @@ export async function selectProfileAction(profileId: string): Promise<ActionResu
   redirect("/");
 }
 
+/** Entra como visitante: vê e mexe em tudo, mas nada é gravado. */
+export async function enterAsGuestAction(): Promise<void> {
+  await writeGuestSession();
+  redirect("/");
+}
+
 export async function signOutAction(): Promise<void> {
-  await clearProfileId();
+  await clearSession();
   redirect("/entrar");
 }
 

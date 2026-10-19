@@ -28,7 +28,7 @@ npm install
 1. Crie um projeto em [supabase.com](https://supabase.com) (o plano gratuito basta)
 2. Abra **SQL Editor** e execute, nesta ordem, cada arquivo de
    [`supabase/migrations/`](supabase/migrations/): `0001_init.sql`,
-   `0002_study_logs_reviews_questions.sql` e `0003_lessons.sql`
+   `0002_study_logs_reviews_questions.sql`, `0003_lessons.sql` e `0004_profile_passwords.sql`
 3. Vá em **Settings → API** e copie `Project URL` e a chave `service_role`
 
 ### 3. Configurar as variáveis de ambiente
@@ -72,13 +72,27 @@ npm run typecheck  # tsc --noEmit
 
 ## Usuários e acesso
 
-A tela `/entrar` lista os perfis do banco e você escolhe o seu. A escolha fica num cookie
-`httpOnly` de um ano; o botão com o nome no cabeçalho troca de perfil.
+A tela `/entrar` lista os perfis do banco. Tocar num perfil abre o campo de senha; o botão com o
+nome no cabeçalho sai do perfil.
 
-**Não há senha.** É uma decisão de projeto para um app de duas pessoas que confiam uma na outra:
-quem tiver o link pode escolher qualquer perfil e ver ou alterar o progresso do outro. O cookie
-registra *quem você escolheu ser*, não prova identidade. Se o app for exposto publicamente ou
-ganhar mais usuários, isso precisa virar autenticação de verdade.
+**Senha por perfil.** Definida (ou trocada) pela linha de comando — não existe tela de cadastro:
+
+```bash
+npm run db:password -- "Davi"
+```
+
+A senha é pedida sem aparecer na tela e vai para o banco só como hash scrypt com sal
+([`lib/password.ts`](lib/password.ts)). Perfil sem senha não consegue entrar. Senha errada
+espera 0,6 s antes de responder, para deixar tentativa em massa lenta.
+
+**Sessão assinada.** O cookie (`httpOnly`, um ano) leva o id do perfil e um HMAC do id com o hash
+da senha, com chave derivada da `SUPABASE_SERVICE_ROLE_KEY` ([`lib/session.ts`](lib/session.ts)).
+Ninguém monta o cookie à mão a partir do id, e **trocar a senha encerra as sessões abertas** do
+perfil. Toda requisição confere a assinatura com o hash atual.
+
+**Visitante.** "Entrar como visitante" abre um ciclo de exemplo, gerado na hora, em que dá para
+mexer em tudo — mas nada é enviado ao servidor, e recarregar a página volta ao início. Não é só
+a interface: toda Server Action de gravação exige um perfil autenticado, e visitante não é um.
 
 O que **é** garantido: o progresso de cada perfil é isolado no banco. Toda tabela de registro
 tem `profile_id` e toda leitura e escrita filtra por ele, então marcar algo num perfil nunca
@@ -136,7 +150,7 @@ inserir itens no meio dessas listas desalinha o que já foi registrado.
 O navegador nunca fala com o Supabase. Todo acesso passa pelo servidor do Next.js usando a
 `service_role`, e a arquitetura é travada em três pontos:
 
-1. Os módulos `lib/db/*`, `lib/env.ts`, `lib/session.ts` e `lib/study-session.ts` importam
+1. Os módulos `lib/db/*`, `lib/env.ts`, `lib/password.ts`, `lib/session.ts` e `lib/study-session.ts` importam
    `server-only` — o build **falha** se algum componente de cliente tentar importá-los
 2. As tabelas têm **RLS ligado e nenhuma policy**, então a chave pública (`anon`) não lê nem
    escreve nada, mesmo que vaze
@@ -175,6 +189,7 @@ supabase/
   migrations/         SQL do schema
 scripts/
   seed-profiles.mjs   Criação dos perfis
+  set-password.mjs    Senha de um perfil (npm run db:password)
 ```
 
 ## Pesos das matérias
