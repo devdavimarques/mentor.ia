@@ -77,8 +77,10 @@ Mono serve **só** para códigos. Texto corrido em mono cansa a leitura.
 
 - **Bloco de aula / tópico** ([`topic-block.tsx`](components/topic-block.tsx)): o bloco do ciclo
   mostra a aula (título · subtítulo da planilha) e, embaixo em `muted`, o item do edital que ela
-  cobre; selos "aula 3 de 10", "não gravada" e "estudo do tópico". A área principal do
-  cartão é o botão que marca o estudo do dia. Checkbox quadrado arredondado; marcado = fundo
+  cobre; selos "aula 3 de 10", "não gravada" e "estudo do tópico". Só o checkbox
+  (área de toque de 40px) marca o estudo do dia; o resto do cartão não reage ao toque, para
+  ninguém marcar sem querer. Desmarcar abre, dentro do cartão, "Desmarcar como feito?" com
+  Cancelar e Desmarcar (borda `danger`). Checkbox quadrado arredondado; marcado = fundo
   `success` + borda verde suave + texto `muted` (sem riscar). Código em selo `accent-soft`;
   "2ª volta" e "1ª revisão" em selo `surface-alt` ([`tag.tsx`](components/ui/tag.tsx)); "mais
   cobrado" em selo `accent-soft` com `accent-text`; revisão
@@ -87,8 +89,9 @@ Mono serve **só** para códigos. Texto corrido em mono cansa a leitura.
   [painel de questões](components/question-panel.tsx) embaixo do cartão.
 - **Abas** ([`tab-nav.tsx`](components/tab-nav.tsx)): a partir de `lg`, controle segmentado no
   cabeçalho, dentro de um trilho `surface`, com a ativa em `accent` cheia. Abaixo de `lg`, barra
-  fixa no rodapé com as cinco abas (ícone + nome), ativa em `accent-text` com pílula
-  `accent-soft`; respeita a área da barra de gestos (`safe-area-inset-bottom`).
+  fixa no rodapé com as seis abas (ícone + nome), ativa em `accent-text` com pílula
+  `accent-soft`; respeita a área da barra de gestos (`safe-area-inset-bottom`). A aba
+  Atrasadas leva um contador em pílula `accent` com as aulas ainda sem fazer (zero não aparece).
 - **Celular:** nenhuma tela pode rolar na horizontal. Grades usam `minmax(0, 1fr)` para encolher
   abaixo do conteúdo, e os cartões se adaptam à própria largura (`@container`), não à da tela.
 - **Chip** ([`chip.tsx`](components/ui/chip.tsx)): pílula; ativo = `accent` cheio.

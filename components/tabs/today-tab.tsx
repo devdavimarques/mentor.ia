@@ -1,18 +1,26 @@
 "use client";
 
-import { BarChart3, CalendarCheck, ListChecks, Target } from "lucide-react";
+import {
+  CalendarCheck,
+  ClipboardList,
+  FastForward,
+  Flag,
+  GraduationCap,
+  Target,
+} from "lucide-react";
+import { useState } from "react";
 
-import { useQuestions } from "@/components/questions-context";
+import { MockExamForm } from "@/components/mock-exam-form";
 import { LessonBlock, TopicBlock } from "@/components/topic-block";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatPanel } from "@/components/ui/stat-panel";
 import { Tag } from "@/components/ui/tag";
+import type { CycleEnd, ExamOutlook } from "@/lib/cycle";
 import { formatLongDate, formatShortDate, fromIsoDate } from "@/lib/date";
-import { blockKey, overallProgress, type Progress, type StudiedMap } from "@/lib/progress";
-import { questionStats } from "@/lib/questions";
+import { blockKey, overallProgress, type StudiedMap } from "@/lib/progress";
 import { daysBetween, type ReviewItem } from "@/lib/reviews";
-import { DAY_LABELS, DAY_LABELS_FULL, SUBJECTS } from "@/lib/subjects";
-import type { ScheduledBlock, WeekSchedule } from "@/lib/types";
+import { DAY_LABELS_FULL, SUBJECTS } from "@/lib/subjects";
+import type { MockResult, ScheduledBlock, WeekSchedule } from "@/lib/types";
 
 interface TodayTabProps {
   today: Date;
@@ -20,12 +28,19 @@ interface TodayTabProps {
   todayIso: number;
   blocks: ScheduledBlock[];
   week: WeekSchedule | null;
-  weekProgress: Progress;
   studied: StudiedMap;
   checked: ReadonlySet<string>;
   reviews: ReviewItem[];
+  cycleEnd: CycleEnd | null;
+  examOutlook: ExamOutlook | null;
+  /** Dia do simulado pendente desta semana, ou `null`. */
+  pendingMock: string | null;
+  /** Hoje é dia de simulado: sem blocos do ciclo, com a opção de adiantar. */
+  isMockDay: boolean;
   onToggleBlock: (block: ScheduledBlock) => void;
   onToggleReview: (item: ReviewItem) => void;
+  onAddMockExam: (results: Record<string, MockResult>) => void;
+  onAdvanceBlock: () => void;
 }
 
 export function TodayTab({
@@ -34,34 +49,48 @@ export function TodayTab({
   todayIso,
   blocks,
   week,
-  weekProgress,
   studied,
   checked,
   reviews,
+  cycleEnd,
+  examOutlook,
+  pendingMock,
+  isMockDay,
   onToggleBlock,
   onToggleReview,
+  onAddMockExam,
+  onAdvanceBlock,
 }: TodayTabProps) {
-  const { logs } = useQuestions();
   const edital = overallProgress(studied, SUBJECTS);
-  const questions = questionStats(logs);
+  const isChecked = (block: ScheduledBlock) => !!week && checked.has(blockKey(week.weekStart, block));
+  const dayDone = blocks.filter(isChecked).length;
+  const dayPct = blocks.length > 0 ? Math.round((dayDone / blocks.length) * 100) : 0;
   const reviewsDone = reviews.filter((r) => r.doneOn).length;
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <div className="flex flex-col gap-8">
+        {pendingMock && (
+          <MockReminder dueOn={pendingMock} todayDate={todayDate} onSubmit={onAddMockExam} />
+        )}
+
         <section>
           <p className="text-accent-text text-xs font-semibold tracking-wider uppercase">
             {DAY_LABELS_FULL[todayIso - 1]} · {formatLongDate(today)}
           </p>
           <h1 className="mt-1 mb-5 text-3xl font-extrabold tracking-tight">
-            {blocks.length === 0
-              ? "Dia livre"
-              : `${blocks.length} bloco${blocks.length > 1 ? "s" : ""} para hoje`}
+            {isMockDay
+              ? "Dia de simulado"
+              : blocks.length === 0
+                ? "Dia livre"
+                : `${blocks.length} bloco${blocks.length > 1 ? "s" : ""} para hoje`}
           </h1>
 
           {blocks.length === 0 ? (
             <div className="border-line text-muted rounded-2xl border border-dashed p-6 text-center text-sm">
-              Sem blocos programados hoje no seu ciclo. Descanse, revise ou adiante a semana.
+              {isMockDay
+                ? "Hoje o ciclo não tem blocos: o dia é do simulado. Se quiser estudar também, adiante blocos da fila."
+                : "Sem blocos programados hoje no seu ciclo. Descanse, revise ou adiante a semana."}
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
@@ -69,11 +98,22 @@ export function TodayTab({
                 <LessonBlock
                   key={`${block.subjectId}:${block.lessonIndex}:${block.lap}`}
                   block={block}
-                  checked={!!week && checked.has(blockKey(week.weekStart, block))}
+                  checked={isChecked(block)}
                   onToggle={() => onToggleBlock(block)}
                 />
               ))}
             </div>
+          )}
+
+          {isMockDay && (
+            <button
+              type="button"
+              onClick={onAdvanceBlock}
+              className="border-line text-accent-text hover:border-accent-text/50 mt-3 flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors"
+            >
+              <FastForward size={15} aria-hidden />
+              {blocks.length === 0 ? "Adiantar um bloco" : "Adiantar mais um bloco"}
+            </button>
           )}
         </section>
 
@@ -113,10 +153,13 @@ export function TodayTab({
       <aside className="grid grid-cols-2 content-start gap-3 lg:grid-cols-1">
         <StatPanel
           icon={CalendarCheck}
-          label="Semana atual"
-          value={`${weekProgress.done} / ${weekProgress.total}`}
+          label="Hoje"
+          value={blocks.length > 0 ? `${dayPct}%` : "—"}
         >
-          <ProgressBar value={weekProgress.pct} label="Blocos estudados na semana" />
+          <ProgressBar value={dayPct} label="Blocos de hoje estudados" />
+          <p className="text-muted mt-2 text-xs tabular-nums">
+            {blocks.length > 0 ? `${dayDone} de ${blocks.length} blocos` : "Dia livre"}
+          </p>
         </StatPanel>
 
         {/* Os dois painéis pequenos vêm juntos: no celular dividem uma linha. */}
@@ -127,23 +170,32 @@ export function TodayTab({
           </p>
         </StatPanel>
 
-        {week && week.days.length > 0 && (
-          <StatPanel icon={BarChart3} label="Blocos por dia" className="col-span-2 lg:col-span-1">
-            <WeekBars week={week} todayIso={todayIso} checked={checked} />
-          </StatPanel>
-        )}
-
         <StatPanel
-          icon={ListChecks}
-          label="Questões resolvidas"
+          icon={Flag}
+          label="Fim do ciclo"
           className="col-span-2 lg:col-span-1"
-          value={questions.answered.toLocaleString("pt-BR")}
+          value={cycleEnd ? formatShortDate(fromIsoDate(cycleEnd.date)) : "—"}
         >
           <p className="text-muted text-xs tabular-nums">
-            {questions.pct === null
-              ? "Lance as questões pelo botão de cada tópico."
-              : `${questions.pct}% de acerto no total`}
+            {cycleEnd
+              ? `${cycleEnd.lap}ª volta de todas as matérias · ${fromIsoDate(cycleEnd.date).getFullYear()}`
+              : "Sem dias de estudo ou matérias no ciclo."}
           </p>
+        </StatPanel>
+
+        <StatPanel
+          icon={GraduationCap}
+          label="Prova"
+          className="col-span-2 lg:col-span-1"
+          value={
+            examOutlook
+              ? examOutlook.daysLeft >= 0
+                ? `${examOutlook.daysLeft} dia${examOutlook.daysLeft === 1 ? "" : "s"}`
+                : "Passou"
+              : "—"
+          }
+        >
+          <ExamOutlookText outlook={examOutlook} />
         </StatPanel>
       </aside>
     </div>
@@ -155,6 +207,7 @@ function ReviewTags({ item, todayDate }: { item: ReviewItem; todayDate: string }
   return (
     <>
       <Tag>{item.stage}ª revisão</Tag>
+      {item.reinforced && <Tag tone="accent">reforço</Tag>}
       <span>estudado em {formatShortDate(fromIsoDate(item.studiedOn))}</span>
       {late > 0 && (
         <span className="text-accent-text font-semibold">
@@ -165,50 +218,87 @@ function ReviewTags({ item, todayDate }: { item: ReviewItem; todayDate: string }
   );
 }
 
-interface WeekBarsProps {
-  week: WeekSchedule;
-  todayIso: number;
-  checked: ReadonlySet<string>;
+/** "em 3 semanas" / "em 5 dias": folga ou atraso arredondado para leitura. */
+function formatSpan(days: number): string {
+  const abs = Math.abs(days);
+  if (abs >= 14) {
+    const weeks = Math.round(abs / 7);
+    return `${weeks} semana${weeks > 1 ? "s" : ""}`;
+  }
+  return `${abs} dia${abs === 1 ? "" : "s"}`;
 }
 
-/** Uma coluna por dia da semana: altura = blocos do dia, parte cheia = estudados. */
-function WeekBars({ week, todayIso, checked }: WeekBarsProps) {
-  const max = Math.max(1, ...week.days.map((day) => day.blocks.length));
+function ExamOutlookText({ outlook }: { outlook: ExamOutlook | null }) {
+  const text = (() => {
+    if (!outlook) return "Defina a data da prova em Configurar para ver se o ciclo fecha a tempo.";
+    const exam = formatShortDate(fromIsoDate(outlook.examDate));
+    if (outlook.daysLeft < 0) return `A prova foi em ${exam}. Atualize a data em Configurar.`;
+    if (outlook.marginDays !== null && outlook.marginDays >= 0) {
+      return outlook.marginDays === 0
+        ? `Em ${exam}. O ciclo termina no dia da prova: sem folga.`
+        : `Em ${exam}. O ciclo termina ${formatSpan(outlook.marginDays)} antes.`;
+    }
+    const late =
+      outlook.marginDays === null
+        ? "O ciclo não termina antes da prova."
+        : `O ciclo termina ${formatSpan(outlook.marginDays)} depois.`;
+    const fix = outlook.suggestion
+      ? ` Com ${outlook.suggestion.blocksPerDay} blocos por dia, termina em ${formatShortDate(
+          fromIsoDate(outlook.suggestion.end),
+        )}.`
+      : " Nem com 4 blocos por dia fecha: acrescente dias de estudo em Configurar.";
+    return `Em ${exam}. ${late}${fix}`;
+  })();
+
+  const late = outlook && outlook.daysLeft >= 0 && (outlook.marginDays ?? -1) < 0;
+  return (
+    <p className={`text-xs ${late ? "text-accent-text font-semibold" : "text-muted"}`}>{text}</p>
+  );
+}
+
+interface MockReminderProps {
+  dueOn: string;
+  todayDate: string;
+  onSubmit: (results: Record<string, MockResult>) => void;
+}
+
+/** Lembrete do simulado da semana; abre o lançamento do resultado. */
+function MockReminder({ dueOn, todayDate, onSubmit }: MockReminderProps) {
+  const [open, setOpen] = useState(false);
+  const when = dueOn === todayDate ? "hoje" : `desde ${formatShortDate(fromIsoDate(dueOn))}`;
 
   return (
-    <div className="flex items-end gap-1.5">
-      {DAY_LABELS.map((label, index) => {
-        const day = week.days.find((d) => d.day === index + 1);
-        const total = day?.blocks.length ?? 0;
-        const done = day?.blocks.filter((b) => checked.has(blockKey(week.weekStart, b))).length ?? 0;
-        const isToday = index + 1 === todayIso;
-
-        return (
-          <div key={label} className="flex flex-1 flex-col items-center gap-1.5">
-            <div
-              className="bg-surface-alt relative flex h-16 w-full flex-col justify-end overflow-hidden rounded-md"
-              title={total > 0 ? `${DAY_LABELS_FULL[index]}: ${done} de ${total}` : undefined}
-            >
-              {total > 0 && (
-                <div
-                  className="bg-accent/30 flex w-full flex-col justify-end rounded-md"
-                  style={{ height: `${(total / max) * 100}%` }}
-                >
-                  <div
-                    className="bg-accent w-full rounded-md transition-[height] duration-300"
-                    style={{ height: `${(done / total) * 100}%` }}
-                  />
-                </div>
-              )}
-            </div>
-            <span
-              className={`text-[0.65rem] font-semibold ${isToday ? "text-accent-text" : "text-muted"}`}
-            >
-              {label}
-            </span>
-          </div>
-        );
-      })}
-    </div>
+    <section
+      aria-labelledby="simulado-semana"
+      className="bg-surface border-accent-text/40 rounded-2xl border p-4"
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="bg-accent-soft text-accent-text flex size-8 shrink-0 items-center justify-center rounded-lg">
+          <ClipboardList size={16} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 id="simulado-semana" className="font-bold tracking-tight">
+            Simulado da semana
+          </h2>
+          <p className="text-muted text-xs">
+            Pendente {when}. Faça a prova inteira no tempo real e lance o acerto por matéria.
+          </p>
+        </div>
+        {!open && (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="bg-accent text-on-accent hover:bg-accent-hover rounded-xl px-4 py-2 text-sm font-semibold transition-colors"
+          >
+            Lançar resultado
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="border-line mt-4 border-t pt-4">
+          <MockExamForm onSubmit={onSubmit} onCancel={() => setOpen(false)} />
+        </div>
+      )}
+    </section>
   );
 }

@@ -10,16 +10,21 @@ import {
   DAY_LABELS_FULL,
   DEFAULT_WEIGHTS,
   MAX_WEIGHT,
+  MOCK_EVERY_WEEKS_OPTIONS,
   SUBJECTS,
 } from "@/lib/subjects";
 import type { Settings, Subject, SubjectGroup } from "@/lib/types";
 
 interface SettingsTabProps {
   settings: Settings;
+  todayDate: string;
   onToggleDay: (day: number) => void;
   onSetBlocksPerDay: (blocks: number) => void;
   onSetWeight: (subjectId: string, weight: number) => void;
   onResetWeights: () => void;
+  onSetExamDate: (date: string | null) => void;
+  onSetMockEveryWeeks: (weeks: number) => void;
+  onSetMockDay: (day: number) => void;
 }
 
 const GROUPS: ReadonlyArray<{ id: SubjectGroup; label: string }> = [
@@ -30,10 +35,14 @@ const GROUPS: ReadonlyArray<{ id: SubjectGroup; label: string }> = [
 
 export function SettingsTab({
   settings,
+  todayDate,
   onToggleDay,
   onSetBlocksPerDay,
   onSetWeight,
   onResetWeights,
+  onSetExamDate,
+  onSetMockEveryWeeks,
+  onSetMockDay,
 }: SettingsTabProps) {
   const weeklyBlocks = settings.activeDays.length * settings.blocksPerDay;
   const totalWeight = SUBJECTS.reduce((sum, s) => sum + (settings.weights[s.id] ?? 0), 0);
@@ -79,10 +88,78 @@ export function SettingsTab({
         <p className="bg-accent-soft text-ink flex items-start gap-2.5 rounded-xl p-4 text-sm">
           <RotateCcw size={16} className="text-accent-text mt-0.5 shrink-0" aria-hidden />
           <span>
-            Mudar qualquer opção desta tela gera um novo cronograma para a semana atual. As aulas
-            já feitas e o progresso de cada matéria são preservados.
+            Mudar dias, blocos, pesos ou simulados gera um novo cronograma de hoje em diante. As
+            aulas já feitas e o progresso de cada matéria são preservados.
           </span>
         </p>
+
+        <fieldset>
+          <legend className="mb-1 text-sm font-bold">Data da prova</legend>
+          <p className="text-muted mb-3 text-sm">
+            A aba Hoje mostra quantos dias faltam e se o ciclo termina a tempo.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              aria-label="Data da prova"
+              value={settings.examDate ?? ""}
+              min={todayDate}
+              // Só grava data completa: enquanto digita, o campo devolve vazio.
+              onChange={(e) => e.target.value && onSetExamDate(e.target.value)}
+              className="bg-surface border-line focus:border-accent-text rounded-xl border px-3 py-2 text-sm tabular-nums outline-none [color-scheme:light_dark]"
+            />
+            {settings.examDate && (
+              <button
+                type="button"
+                onClick={() => onSetExamDate(null)}
+                className="text-accent-text hover:text-ink text-sm font-semibold"
+              >
+                Remover
+              </button>
+            )}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend className="mb-1 text-sm font-bold">Simulados</legend>
+          <p className="text-muted mb-3 text-sm">
+            No dia do simulado o ciclo não tem blocos: as aulas vão para os outros dias. Se quiser
+            estudar mesmo assim, adiante blocos pela aba Hoje.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {MOCK_EVERY_WEEKS_OPTIONS.map((weeks) => {
+              const label = weeks === 0 ? "Desligado" : `A cada ${weeks} semanas`;
+              return (
+                <Chip
+                  key={weeks}
+                  active={settings.mockEveryWeeks === weeks}
+                  onClick={() => onSetMockEveryWeeks(weeks)}
+                >
+                  {label}
+                </Chip>
+              );
+            })}
+          </div>
+          {settings.mockEveryWeeks > 0 && (
+            <>
+              <p className="text-muted mt-4 mb-2 text-xs font-semibold tracking-wider uppercase">
+                Dia do simulado
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {DAY_LABELS.map((label, index) => (
+                  <Chip
+                    key={label}
+                    active={settings.mockDay === index + 1}
+                    onClick={() => onSetMockDay(index + 1)}
+                    label={`Simulado no ${DAY_LABELS_FULL[index].toLowerCase()}`}
+                  >
+                    {label}
+                  </Chip>
+                ))}
+              </div>
+            </>
+          )}
+        </fieldset>
       </div>
 
       <section aria-labelledby="pesos">

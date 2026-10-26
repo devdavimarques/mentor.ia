@@ -3,9 +3,18 @@ import {
   DEFAULT_SETTINGS,
   findSubject,
   MAX_WEIGHT,
+  MOCK_EVERY_WEEKS_OPTIONS,
   SUBJECTS,
 } from "./subjects";
-import type { Pointers, ScheduledDay, Settings, WeekSchedule } from "./types";
+import type {
+  LateBlock,
+  Pointers,
+  ReplanNote,
+  ScheduledBlock,
+  ScheduledDay,
+  Settings,
+  WeekSchedule,
+} from "./types";
 
 /**
  * Validação do estado do ciclo.
@@ -91,6 +100,14 @@ export function parseSettings(value: unknown): Settings {
     blocksPerDay,
     weights: parseWeights(value.weights),
     weightBase: parsePointers(value.weightBase),
+    examDate: isIsoDate(value.examDate) ? value.examDate : null,
+    // Configurações gravadas antes dos simulados não têm o campo: vale o padrão.
+    mockEveryWeeks: MOCK_EVERY_WEEKS_OPTIONS.includes(
+      value.mockEveryWeeks as (typeof MOCK_EVERY_WEEKS_OPTIONS)[number],
+    )
+      ? (value.mockEveryWeeks as number)
+      : DEFAULT_SETTINGS.mockEveryWeeks,
+    mockDay: isIsoDay(value.mockDay) ? value.mockDay : DEFAULT_SETTINGS.mockDay,
   };
 }
 
@@ -106,6 +123,48 @@ export function parsePointers(value: unknown): Pointers {
   return pointers;
 }
 
+function isIsoDay(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 7;
+}
+
+function parseBlock(raw: unknown): ScheduledBlock | null {
+  if (!isRecord(raw) || !isKnownLesson(raw.subjectId, raw.lessonIndex)) return null;
+  const block: ScheduledBlock = {
+    subjectId: raw.subjectId as string,
+    lessonIndex: raw.lessonIndex as number,
+    lap: Number.isInteger(raw.lap) ? Math.max(1, raw.lap as number) : 1,
+  };
+  if (raw.carried === true) block.carried = true;
+  if (raw.replanned === true) block.replanned = true;
+  return block;
+}
+
+function parseBlocks(value: unknown): ScheduledBlock[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(parseBlock).filter((b): b is ScheduledBlock => b !== null);
+}
+
+function parseLateBlocks(value: unknown): LateBlock[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((raw) => {
+    const block = parseBlock(raw);
+    if (!block || !isRecord(raw) || !isIsoDate(raw.weekStart) || !isIsoDay(raw.day)) return [];
+    return [{ ...block, weekStart: raw.weekStart, day: raw.day }];
+  });
+}
+
+function parseReplan(value: unknown): ReplanNote | null {
+  if (!isRecord(value) || !isIsoDate(value.on) || !Number.isInteger(value.moved)) return null;
+  const date = (v: unknown) => (isIsoDate(v) ? v : null);
+  return {
+    on: value.on,
+    moved: Math.max(0, value.moved as number),
+    endBefore: date(value.endBefore),
+    endAfter: date(value.endAfter),
+  };
+}
+
+/** Semanas gravadas antes da fila de atrasados vêm sem `spill`, `late` e `replan`: começam vazios. */
 export function parseWeek(value: unknown): WeekSchedule | null {
   if (!isRecord(value) || !isIsoDate(value.weekStart) || !Array.isArray(value.days)) {
     return null;
@@ -113,25 +172,15 @@ export function parseWeek(value: unknown): WeekSchedule | null {
 
   const days: ScheduledDay[] = [];
   for (const rawDay of value.days) {
-    if (!isRecord(rawDay) || !Number.isInteger(rawDay.day) || !Array.isArray(rawDay.blocks)) {
-      continue;
-    }
-
-    const blocks = rawDay.blocks.flatMap((rawBlock) => {
-      if (!isRecord(rawBlock) || !isKnownLesson(rawBlock.subjectId, rawBlock.lessonIndex)) {
-        return [];
-      }
-      return [
-        {
-          subjectId: rawBlock.subjectId as string,
-          lessonIndex: rawBlock.lessonIndex as number,
-          lap: Number.isInteger(rawBlock.lap) ? Math.max(1, rawBlock.lap as number) : 1,
-        },
-      ];
-    });
-
-    days.push({ day: rawDay.day as number, blocks });
+    if (!isRecord(rawDay) || !isIsoDay(rawDay.day)) continue;
+    days.push({ day: rawDay.day, blocks: parseBlocks(rawDay.blocks) });
   }
 
-  return { weekStart: value.weekStart, days };
+  return {
+    weekStart: value.weekStart,
+    days,
+    spill: parseBlocks(value.spill),
+    late: parseLateBlocks(value.late),
+    replan: parseReplan(value.replan),
+  };
 }

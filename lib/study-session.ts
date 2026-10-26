@@ -1,6 +1,7 @@
 import "server-only";
 
-import { currentWeekStart } from "./date";
+import { syncCycle } from "./cycle";
+import { currentWeekStart, todayIsoDate } from "./date";
 import { findProfileCredentials } from "./db/profiles";
 import { loadStudyState, saveSchedule } from "./db/study-state";
 import { generateWeek } from "./schedule";
@@ -37,25 +38,31 @@ export async function currentProfile(): Promise<Profile | null> {
 }
 
 /**
- * Estado do ciclo com a garantia de que existe cronograma para a semana atual.
+ * Estado do ciclo com a garantia de que existe cronograma para a semana atual
+ * e de que o replanejamento do dia já foi feito.
  *
- * A virada de semana acontece aqui, no servidor, na primeira visita da segunda-
- * feira: se o cronograma guardado é de outra semana, um novo é gerado e salvo.
+ * A virada de semana e o replanejamento acontecem aqui, no servidor, na
+ * primeira visita do dia em que forem necessários (`syncCycle`), e são salvos.
  */
 export async function loadCurrentCycle(profileId: string): Promise<StudyState> {
   const state = await loadStudyState(profileId);
-  const weekStart = currentWeekStart();
+  const { snapshot, changed } = syncCycle(state, todayIsoDate());
 
-  if (state.week?.weekStart === weekStart) return state;
-
-  const { week, pointers } = generateWeek(state.settings, state.pointers, weekStart);
-  await saveSchedule(profileId, { settings: state.settings, pointers, week });
-  return { ...state, week, pointers };
+  if (changed) await saveSchedule(profileId, snapshot);
+  return { ...state, ...snapshot };
 }
 
 /** Ciclo do visitante: o padrão, do zero, gerado a cada visita e nunca salvo. */
 export function guestCycle(): StudyState {
   const settings = parseSettings(null);
   const { week, pointers } = generateWeek(settings, {}, currentWeekStart());
-  return { settings, pointers, week, studyLogs: [], reviewLogs: [], questionLogs: [] };
+  return {
+    settings,
+    pointers,
+    week,
+    studyLogs: [],
+    reviewLogs: [],
+    questionLogs: [],
+    mockExams: [],
+  };
 }

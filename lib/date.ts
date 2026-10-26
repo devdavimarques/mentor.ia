@@ -68,7 +68,12 @@ export function todayIsoDate(now: Date = new Date()): string {
   }).format(now);
 }
 
+/** Segunda-feira da semana de uma data `yyyy-mm-dd`, no mesmo formato. */
+export function weekStartOf(iso: string): string {
+  return toIsoDate(startOfIsoWeek(fromIsoDate(iso)));
+}
+
 /** Segunda-feira da semana corrente, no fuso do app, como `yyyy-mm-dd`. */
 export function currentWeekStart(): string {
-  return toIsoDate(startOfIsoWeek(fromIsoDate(todayIsoDate())));
+  return weekStartOf(todayIsoDate());
 }

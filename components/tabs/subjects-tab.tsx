@@ -1,6 +1,6 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 
 import { QuestionPanel } from "@/components/question-panel";
@@ -31,8 +31,8 @@ interface SubjectsTabProps {
 
 export function SubjectsTab({ studied, lessons, manual, onToggleTopic }: SubjectsTabProps) {
   return (
-    <div className="flex flex-col gap-8">
-      <p className="text-muted -mb-4 max-w-xl text-sm">
+    <div className="flex flex-col gap-2.5">
+      <p className="text-muted mb-2 max-w-xl text-sm">
         Um tópico fica estudado quando você termina todas as aulas dele no ciclo. Se estudou
         por fora, marque aqui.
       </p>
@@ -42,18 +42,29 @@ export function SubjectsTab({ studied, lessons, manual, onToggleTopic }: Subject
         const progress = subjectProgress(studied, subject);
 
         return (
-          <section key={subject.id}>
-            <h2 className="mb-3 flex items-center gap-2.5">
+          // Acordeão nativo: começa fechado, abre com teclado e leitor de tela sem JS extra.
+          <details
+            key={subject.id}
+            className="group bg-surface border-line open:border-accent-text/40 rounded-2xl border transition-colors"
+          >
+            <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-2xl p-4 select-none [&::-webkit-details-marker]:hidden">
               <span className="bg-accent-soft text-accent-text flex size-8 shrink-0 items-center justify-center rounded-lg">
                 <Icon size={16} aria-hidden />
               </span>
-              <span className="text-lg font-bold tracking-tight">{subject.name}</span>
-              <span className="text-muted ml-auto shrink-0 text-xs font-medium tabular-nums">
-                {progress.done}/{progress.total} · peso {subject.weight}
+              <h2 className="min-w-0 flex-1 truncate text-base font-bold tracking-tight sm:text-lg">
+                {subject.name}
+              </h2>
+              <span className="text-muted shrink-0 text-xs font-medium tabular-nums">
+                {progress.done}/{progress.total}
               </span>
-            </h2>
+              <ChevronDown
+                size={18}
+                aria-hidden
+                className="text-muted shrink-0 transition-transform group-open:rotate-180"
+              />
+            </summary>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 px-3 pb-3 sm:px-4 sm:pb-4">
               {subject.topics.map((topic, index) => (
                 <TopicRow
                   key={topic}
@@ -66,7 +77,7 @@ export function SubjectsTab({ studied, lessons, manual, onToggleTopic }: Subject
                 />
               ))}
             </div>
-          </section>
+          </details>
         );
       })}
     </div>

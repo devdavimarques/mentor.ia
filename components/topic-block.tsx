@@ -24,8 +24,10 @@ interface StudyCardProps {
 }
 
 /**
- * Cartão de algo a estudar ou revisar. A área principal marca o que foi feito
- * hoje; o botão à direita abre o lançamento de questões do tópico.
+ * Cartão de algo a estudar ou revisar. Só o quadrado do check marca o que foi
+ * feito hoje — tocar no resto do cartão não faz nada, para não marcar sem
+ * querer — e desmarcar pede confirmação. O botão à direita abre o lançamento
+ * de questões do tópico.
  */
 function StudyCard({
   subjectId,
@@ -37,6 +39,9 @@ function StudyCard({
   tags,
 }: StudyCardProps) {
   const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  // Desmarcado por fora (ex.: gravação revertida): a pergunta não volta sozinha depois.
+  if (confirming && !checked) setConfirming(false);
   const { logs } = useQuestions();
   const subject = findSubject(subjectId);
   if (!subject) return null;
@@ -57,23 +62,21 @@ function StudyCard({
         checked ? "border-success/40" : "border-line hover:border-accent-text/50"
       }`}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-pressed={checked}
-        aria-label={`${codes.join(", ")} — ${title}`}
-        className="flex w-full items-start gap-3 rounded-2xl p-4 text-left"
-      >
-        <span
-          aria-hidden
-          className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg border-[1.5px] transition-colors ${
-            checked ? "bg-success border-success text-white" : "border-line"
+      <div className="flex w-full items-start gap-3 p-4">
+        {/* O `before` invisível aumenta a área de toque sem mudar o tamanho do quadrado. */}
+        <button
+          type="button"
+          onClick={() => (checked ? setConfirming(true) : onToggle())}
+          aria-pressed={checked}
+          aria-label={`${checked ? "Desmarcar" : "Marcar como feito"}: ${codes.join(", ")} — ${title}`}
+          className={`relative mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg border-[1.5px] transition-colors before:absolute before:-inset-2 before:content-[''] ${
+            checked ? "bg-success border-success text-white" : "border-line hover:border-accent-text"
           }`}
         >
-          {checked && <Check size={15} strokeWidth={3} />}
-        </span>
+          {checked && <Check size={15} strokeWidth={3} aria-hidden />}
+        </button>
 
-        <span className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1">
           {/* `pr-*` deixa espaço para o botão de questões, que flutua no canto. */}
           <span className="text-muted mb-1.5 flex min-w-0 items-center gap-2 pr-12 text-xs font-medium @[28rem]:pr-28">
             {shownCodes.map((code) => (
@@ -109,8 +112,37 @@ function StudyCard({
           <span className="text-muted mt-2.5 flex flex-wrap items-center gap-1.5 text-xs empty:hidden">
             {tags}
           </span>
-        </span>
-      </button>
+        </div>
+      </div>
+
+      {confirming && checked && (
+        <div
+          role="alertdialog"
+          aria-label="Confirmar desmarcação"
+          className="border-line flex flex-wrap items-center gap-2 border-t px-4 py-3 text-sm"
+        >
+          <span className="flex-1 font-medium">Desmarcar como feito?</span>
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            className="text-muted hover:text-ink rounded-xl px-3 py-1.5 font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            // Foco aqui ao abrir: Enter confirma, Tab leva ao Cancelar.
+            autoFocus
+            onClick={() => {
+              setConfirming(false);
+              onToggle();
+            }}
+            className="border-danger/40 text-danger hover:bg-danger/10 rounded-xl border px-3 py-1.5 font-semibold transition-colors"
+          >
+            Desmarcar
+          </button>
+        </div>
+      )}
 
       <QuestionsToggle
         open={open}
@@ -166,10 +198,12 @@ interface LessonBlockProps {
   block: ScheduledBlock;
   checked: boolean;
   onToggle: () => void;
+  /** Selos de contexto, antes dos da aula (ex.: atraso). */
+  tags?: React.ReactNode;
 }
 
 /** Cartão de um bloco do ciclo: uma aula do curso, com o item do edital que ela cobre. */
-export function LessonBlock({ block, checked, onToggle }: LessonBlockProps) {
+export function LessonBlock({ block, checked, onToggle, tags }: LessonBlockProps) {
   const subject = findSubject(block.subjectId);
   const lesson = subject?.lessons[block.lessonIndex];
   if (!subject || !lesson) return null;
@@ -190,6 +224,8 @@ export function LessonBlock({ block, checked, onToggle }: LessonBlockProps) {
       onToggle={onToggle}
       tags={
         <>
+          {tags}
+          {block.replanned && <Tag>replanejada</Tag>}
           {lesson.selfStudy ? (
             <Tag>estudo do tópico</Tag>
           ) : (

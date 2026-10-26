@@ -12,6 +12,12 @@ import type { ReviewLog, ReviewStage } from "./types";
  */
 export const REVIEW_INTERVALS: Readonly<Record<ReviewStage, number>> = { 1: 1, 2: 7, 3: 30 };
 
+/**
+ * Intervalos de reforço, para tópico com acerto baixo nas questões: a revisão
+ * pendente vence antes. Quando o acerto sobe, voltam os intervalos normais.
+ */
+export const REINFORCED_INTERVALS: Readonly<Record<ReviewStage, number>> = { 1: 1, 2: 3, 3: 14 };
+
 export const REVIEW_STAGES: readonly ReviewStage[] = [1, 2, 3];
 
 export function isReviewStage(value: unknown): value is ReviewStage {
@@ -28,6 +34,8 @@ export interface ReviewItem {
   dueOn: string;
   /** Preenchido quando a revisão foi feita hoje. */
   doneOn: string | null;
+  /** Tópico com acerto baixo: revisa nos intervalos de reforço. */
+  reinforced: boolean;
 }
 
 function shiftIso(iso: string, days: number): string {
@@ -47,6 +55,7 @@ export function reviewsForDay(
   studied: StudiedMap,
   reviewLogs: readonly ReviewLog[],
   today: string,
+  weak: ReadonlySet<string> = new Set(),
 ): ReviewItem[] {
   const doneByTopic = new Map<string, ReviewLog[]>();
   for (const log of reviewLogs) {
@@ -67,27 +76,26 @@ export function reviewsForDay(
       // Revisões anteriores ao último estudo pertencem a uma sequência antiga.
       const done = (doneByTopic.get(key) ?? []).filter((log) => log.doneOn >= studiedOn);
       const doneOnByStage = new Map(done.map((log) => [log.stage, log.doneOn]));
+      const reinforced = weak.has(key);
+      const intervals = reinforced ? REINFORCED_INTERVALS : REVIEW_INTERVALS;
+      const base = { subjectId: subject.id, topicIndex, studiedOn, reinforced };
 
       let previousDone = studiedOn;
       for (const stage of REVIEW_STAGES) {
         // Uma revisão nunca vence no mesmo dia da anterior: se a 1ª atrasou,
         // a 2ª espera pelo menos até o dia seguinte.
-        const scheduled = shiftIso(studiedOn, REVIEW_INTERVALS[stage]);
+        const scheduled = shiftIso(studiedOn, intervals[stage]);
         const earliest = shiftIso(previousDone, 1);
         const dueOn = scheduled > earliest ? scheduled : earliest;
         const doneOn = doneOnByStage.get(stage);
 
         if (doneOn) {
-          if (doneOn === today) {
-            items.push({ subjectId: subject.id, topicIndex, stage, studiedOn, dueOn, doneOn });
-          }
+          if (doneOn === today) items.push({ ...base, stage, dueOn, doneOn });
           previousDone = doneOn;
           continue;
         }
 
-        if (dueOn <= today) {
-          items.push({ subjectId: subject.id, topicIndex, stage, studiedOn, dueOn, doneOn: null });
-        }
+        if (dueOn <= today) items.push({ ...base, stage, dueOn, doneOn: null });
         break;
       }
     });

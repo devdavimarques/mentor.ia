@@ -53,6 +53,32 @@ export interface ScheduledBlock {
   lessonIndex: number;
   /** Quantas vezes o ciclo já passou por toda a matéria (1 = primeira volta). */
   lap: number;
+  /**
+   * Distribuído numa semana anterior e trazido para esta (sobrou no fim da
+   * outra, ou estava atrasado). Já conta nos ponteiros de lá, então regerar
+   * esta semana não o devolve à matéria.
+   */
+  carried?: boolean;
+  /** Mudou de dia porque ficou atrasado 3 dias de estudo. */
+  replanned?: boolean;
+}
+
+/** Bloco de uma semana anterior que ficou sem fazer e ainda não foi replanejado. */
+export interface LateBlock extends ScheduledBlock {
+  /** Semana e dia em que estava programado — e a semana que identifica o bloco. */
+  weekStart: string;
+  day: number;
+}
+
+/** Último replanejamento automático, para avisar na aba Hoje. */
+export interface ReplanNote {
+  /** Dia em que aconteceu, `yyyy-mm-dd`. */
+  on: string;
+  /** Aulas atrasadas que voltaram para a fila. */
+  moved: number;
+  /** Previsão de fim do ciclo antes e depois. */
+  endBefore: string | null;
+  endAfter: string | null;
 }
 
 export interface ScheduledDay {
@@ -65,6 +91,11 @@ export interface WeekSchedule {
   /** Segunda-feira da semana, no formato `yyyy-mm-dd`. */
   weekStart: string;
   days: ScheduledDay[];
+  /** Blocos empurrados para depois do fim da semana: abrem a semana seguinte. */
+  spill: ScheduledBlock[];
+  /** Blocos de semanas anteriores ainda sem fazer e com menos de 3 dias de atraso. */
+  late: LateBlock[];
+  replan: ReplanNote | null;
 }
 
 export interface Settings {
@@ -79,6 +110,12 @@ export interface Settings {
    * faria a matéria "recuperar" meses de atraso numa semana só.
    */
   weightBase: Pointers;
+  /** Data provável da prova, `yyyy-mm-dd`, ou `null` se não definida. */
+  examDate: string | null;
+  /** Simulado a cada N semanas; 0 = desligado. */
+  mockEveryWeeks: number;
+  /** Dia ISO do simulado (1 = segunda). Nas semanas de simulado, fica sem blocos. */
+  mockDay: number;
 }
 
 /** `subjectId` → quantidade de aulas já distribuídas (acumulado entre voltas). */
@@ -134,6 +171,20 @@ export interface QuestionLog {
   loggedOn: string;
 }
 
+/** Questões de uma matéria num simulado. */
+export interface MockResult {
+  answered: number;
+  correct: number;
+}
+
+/** Um simulado feito: o resultado de cada matéria objetiva. */
+export interface MockExam {
+  id: string;
+  takenOn: string;
+  /** `subjectId` → resultado. Só matérias com questões feitas. */
+  results: Record<string, MockResult>;
+}
+
 export interface StudyState {
   settings: Settings;
   pointers: Pointers;
@@ -141,9 +192,10 @@ export interface StudyState {
   studyLogs: StudyLog[];
   reviewLogs: ReviewLog[];
   questionLogs: QuestionLog[];
+  mockExams: MockExam[];
 }
 
-export type TabId = "hoje" | "semana" | "materias" | "progresso" | "config";
+export type TabId = "hoje" | "semana" | "atrasadas" | "materias" | "progresso" | "config";
 
 /** Pessoa que usa o app. Criada por `npm run db:seed`, sem cadastro público. */
 export interface Profile {

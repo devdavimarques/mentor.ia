@@ -389,9 +389,15 @@ export const DEFAULT_WEIGHTS: Readonly<Record<string, number>> = Object.fromEntr
   SUBJECTS.map((s) => [s.id, s.weight]),
 );
 
+/** Frequência dos simulados, em semanas; 0 = desligado. */
+export const MOCK_EVERY_WEEKS_OPTIONS = [0, 2, 4] as const;
+
 export const DEFAULT_SETTINGS: Settings = {
   activeDays: [1, 2, 3, 4, 5, 6],
   blocksPerDay: 3,
   weights: { ...DEFAULT_WEIGHTS },
   weightBase: {},
+  examDate: null,
+  mockEveryWeeks: 2,
+  mockDay: 6,
 };

@@ -6,12 +6,16 @@ import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { QuestionsProvider } from "@/components/questions-context";
 import { TabBar, TabNav } from "@/components/tab-nav";
+import { OverdueTab } from "@/components/tabs/overdue-tab";
 import { ProgressTab } from "@/components/tabs/progress-tab";
 import { SettingsTab } from "@/components/tabs/settings-tab";
 import { SubjectsTab } from "@/components/tabs/subjects-tab";
 import { TodayTab } from "@/components/tabs/today-tab";
 import { WeekTab } from "@/components/tabs/week-tab";
 import { useStudyCycle } from "@/hooks/use-study-cycle";
+import { mockTakenInWeek } from "@/lib/mock-exams";
+import { blockKey } from "@/lib/progress";
+import { mockDayOfWeek } from "@/lib/schedule";
 import type { Profile, StudyState, TabId } from "@/lib/types";
 
 interface StudyCycleProps {
@@ -42,6 +46,11 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     manual,
     checked,
     reviews,
+    overdue,
+    cycleEnd,
+    examOutlook,
+    topicAccuracy,
+    pendingMock,
     saving,
     error,
     dismissError,
@@ -54,12 +63,25 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     setBlocksPerDay,
     setWeight,
     resetWeights,
+    replanCycle,
+    setExamDate,
+    setMockEveryWeeks,
+    setMockDay,
+    advanceOneBlock,
+    isMockDay,
+    addMockExam,
+    deleteMockExam,
   } = useStudyCycle(initialState, todayDate, !guest);
 
   const questionsApi = useMemo(
     () => ({ logs: state.questionLogs, add: addQuestions, remove: deleteQuestions }),
     [state.questionLogs, addQuestions, deleteQuestions],
   );
+
+  // Contador da aba: só as atrasadas ainda sem fazer.
+  const badges = {
+    atrasadas: overdue.filter((o) => !checked.has(blockKey(o.weekStart, o.block))).length,
+  };
 
   return (
     <QuestionsProvider value={questionsApi}>
@@ -68,7 +90,7 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
           guest={guest}
           profile={profile}
           saving={saving}
-          nav={<TabNav active={tab} onChange={setTab} />}
+          nav={<TabNav active={tab} onChange={setTab} badges={badges} />}
         />
 
         {guest && (
@@ -113,12 +135,28 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
               todayIso={todayIso}
               blocks={todayBlocks}
               week={state.week}
-              weekProgress={weekProgress}
               studied={studied}
               checked={checked}
               reviews={reviews}
+              cycleEnd={cycleEnd}
+              examOutlook={examOutlook}
+              pendingMock={pendingMock}
+              isMockDay={isMockDay}
               onToggleBlock={toggleBlock}
               onToggleReview={toggleReview}
+              onAddMockExam={addMockExam}
+              onAdvanceBlock={advanceOneBlock}
+            />
+          )}
+
+          {tab === "atrasadas" && (
+            <OverdueTab
+              todayDate={todayDate}
+              week={state.week}
+              checked={checked}
+              overdue={overdue}
+              onToggleBlock={toggleBlock}
+              onReplan={replanCycle}
             />
           )}
 
@@ -128,6 +166,8 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
               todayIso={todayIso}
               weekProgress={weekProgress}
               checked={checked}
+              mockDay={mockDayOfWeek(state.settings, state.week.weekStart)}
+              mockDone={mockTakenInWeek(state.week.weekStart, state.mockExams)}
               onToggleBlock={toggleBlock}
             />
           )}
@@ -141,21 +181,36 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
             />
           )}
 
-          {tab === "progresso" && <ProgressTab studied={studied} lessons={lessons} pointers={state.pointers} />}
+          {tab === "progresso" && (
+            <ProgressTab
+              studied={studied}
+              lessons={lessons}
+              pointers={state.pointers}
+              cycleEnd={cycleEnd}
+              topicAccuracy={topicAccuracy}
+              mockExams={state.mockExams}
+              onAddMockExam={addMockExam}
+              onDeleteMockExam={deleteMockExam}
+            />
+          )}
 
           {tab === "config" && (
             <SettingsTab
               settings={state.settings}
+              todayDate={todayDate}
               onToggleDay={toggleDay}
               onSetBlocksPerDay={setBlocksPerDay}
               onSetWeight={setWeight}
               onResetWeights={resetWeights}
+              onSetExamDate={setExamDate}
+              onSetMockEveryWeeks={setMockEveryWeeks}
+              onSetMockDay={setMockDay}
             />
           )}
         </div>
       </div>
 
-      <TabBar active={tab} onChange={setTab} />
+      <TabBar active={tab} onChange={setTab} badges={badges} />
     </QuestionsProvider>
   );
 }

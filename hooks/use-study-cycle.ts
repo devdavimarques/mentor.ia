@@ -3,16 +3,29 @@
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 
 import {
+  addMockExamAction,
   addQuestionsAction,
+  advanceBlockAction,
+  deleteMockExamAction,
   deleteQuestionsAction,
   markReviewAction,
+  replanCycleAction,
   setTopicStudiedAction,
   toggleBlockAction,
   unmarkReviewAction,
+  updateExamDateAction,
   updateSettingsAction,
   type ActionResult,
 } from "@/app/actions";
-import { fromIsoDate, isoWeekday, startOfIsoWeek, toIsoDate } from "@/lib/date";
+import {
+  examOutlook as calcExamOutlook,
+  projectCycleEnd,
+  replanCycle as replanSchedule,
+  type CycleEnd,
+  type ExamOutlook,
+} from "@/lib/cycle";
+import { fromIsoDate, isoWeekday } from "@/lib/date";
+import { pendingMock as calcPendingMock } from "@/lib/mock-exams";
 import {
   checkedBlocks,
   manualTopics,
@@ -23,12 +36,25 @@ import {
   type Progress,
   type StudiedMap,
 } from "@/lib/progress";
-import { PENDING_ID_PREFIX } from "@/lib/questions";
+import {
+  PENDING_ID_PREFIX,
+  topicsByAccuracy,
+  weakTopicKeys,
+  type TopicAccuracy,
+} from "@/lib/questions";
 import { reviewsForDay, type ReviewItem } from "@/lib/reviews";
-import { regenerateWeek } from "@/lib/schedule";
+import {
+  advanceBlock,
+  mockDayOfWeek,
+  overdueBlocks,
+  regenerateWeek,
+  type OverdueBlock,
+} from "@/lib/schedule";
 import { DEFAULT_WEIGHTS } from "@/lib/subjects";
 import type {
   BlockRef,
+  MockExam,
+  MockResult,
   QuestionLog,
   ReviewLog,
   ScheduledBlock,
@@ -56,10 +82,21 @@ export interface StudyCycle {
   checked: ReadonlySet<string>;
   /** Revisões vencidas e as feitas hoje. */
   reviews: ReviewItem[];
+  /** Blocos atrasados ainda sem fazer, e os atrasados feitos hoje (para desfazer). */
+  overdue: OverdueBlock[];
+  /** Previsão de fim do ciclo pelo cronograma atual. */
+  cycleEnd: CycleEnd | null;
+  /** Prazo até a prova, se a data estiver definida. */
+  examOutlook: ExamOutlook | null;
+  /** Tópicos com questões suficientes, do pior acerto para o melhor. */
+  topicAccuracy: TopicAccuracy[];
+  /** Dia do simulado desta semana, se ele está pendente. */
+  pendingMock: string | null;
   saving: boolean;
   error: string | null;
   dismissError: () => void;
-  toggleBlock: (block: ScheduledBlock) => void;
+  /** `weekStart` só para atrasados de outra semana; o padrão é a semana atual. */
+  toggleBlock: (block: ScheduledBlock, weekStart?: string) => void;
   toggleTopicStudied: (subjectId: string, topicIndex: number) => void;
   toggleReview: (item: ReviewItem) => void;
   addQuestions: (subjectId: string, topicIndex: number, answered: number, correct: number) => void;
@@ -70,6 +107,19 @@ export interface StudyCycle {
   setWeight: (subjectId: string, weight: number) => void;
   /** Volta todos os pesos ao padrão. */
   resetWeights: () => void;
+  /** Encaixa todas as aulas atrasadas no começo da fila de hoje, sem mexer no progresso. */
+  replanCycle: () => void;
+  /** Data da prova (`null` apaga). Não mexe no cronograma. */
+  setExamDate: (date: string | null) => void;
+  /** Frequência e dia do simulado. Regeram a semana de hoje em diante. */
+  setMockEveryWeeks: (weeks: number) => void;
+  setMockDay: (day: number) => void;
+  /** Dia de simulado: traz o próximo bloco da fila para hoje. */
+  advanceOneBlock: () => void;
+  /** Hoje é o dia do simulado desta semana (sem blocos do ciclo). */
+  isMockDay: boolean;
+  addMockExam: (results: Record<string, MockResult>) => void;
+  deleteMockExam: (id: string) => void;
 }
 
 /** Troca o registro otimista pelo que o banco gravou (a data vem do servidor). */
@@ -141,12 +191,11 @@ export function useStudyCycle(
   );
 
   const toggleBlock = useCallback(
-    (block: ScheduledBlock) => {
-      const week = stateRef.current.week;
-      if (!week) return;
+    (block: ScheduledBlock, weekStart = stateRef.current.week?.weekStart) => {
+      if (!weekStart) return;
 
       const ref: BlockRef = {
-        weekStart: week.weekStart,
+        weekStart,
         subjectId: block.subjectId,
         lessonIndex: block.lessonIndex,
         lap: block.lap,
@@ -292,13 +341,19 @@ export function useStudyCycle(
   const applySettings = useCallback(
     (change: (settings: Settings) => Settings) => {
       const previous = stateRef.current;
+      const week = previous.week;
+      // O servidor sempre manda a semana atual pronta; sem ela não há o que regerar.
+      if (!week) return;
       const requested = change(previous.settings);
-      const weekStart =
-        previous.week?.weekStart ?? toIsoDate(startOfIsoWeek(fromIsoDate(todayDate)));
 
       // Mesma função pura do servidor: o resultado otimista bate com o que
       // volta gravado, e a tela não "pisca" na reconciliação.
-      const optimistic = regenerateWeek(previous, requested, weekStart);
+      const optimistic = regenerateWeek(
+        { ...previous, week },
+        requested,
+        checkedBlocks(previous.studyLogs),
+        todayDate,
+      );
 
       mutate(
         (s) => ({ ...s, ...optimistic }),
@@ -347,6 +402,104 @@ export function useStudyCycle(
     [applySettings],
   );
 
+  const replanCycle = useCallback(() => {
+    const previous = stateRef.current;
+    const week = previous.week;
+    if (!week) return;
+
+    const optimistic = replanSchedule(
+      { settings: previous.settings, pointers: previous.pointers, week },
+      checkedBlocks(previous.studyLogs),
+      todayDate,
+      true,
+    );
+    if (optimistic.moved === 0) return;
+
+    mutate(
+      (s) => ({ ...s, ...optimistic.snapshot }),
+      (s) => ({ ...s, pointers: previous.pointers, week: previous.week }),
+      () => replanCycleAction(),
+      (s, snapshot) => ({ ...s, ...snapshot }),
+    );
+  }, [mutate, todayDate]);
+
+  const advanceOneBlock = useCallback(() => {
+    const previous = stateRef.current;
+    const week = previous.week;
+    if (!week) return;
+
+    // Mesma função pura do servidor, como no replanejamento.
+    const optimistic = advanceBlock(
+      { settings: previous.settings, pointers: previous.pointers, week },
+      checkedBlocks(previous.studyLogs),
+      todayDate,
+    );
+
+    mutate(
+      (s) => ({ ...s, ...optimistic }),
+      (s) => ({ ...s, pointers: previous.pointers, week: previous.week }),
+      () => advanceBlockAction(),
+      (s, snapshot) => ({ ...s, ...snapshot }),
+    );
+  }, [mutate, todayDate]);
+
+  // A data da prova não mexe no cronograma: só ela vai para o servidor.
+  const setExamDate = useCallback(
+    (examDate: string | null) => {
+      const previous = stateRef.current.settings.examDate;
+      mutate(
+        (s) => ({ ...s, settings: { ...s.settings, examDate } }),
+        (s) => ({ ...s, settings: { ...s.settings, examDate: previous } }),
+        () => updateExamDateAction(examDate),
+      );
+    },
+    [mutate],
+  );
+
+  // Frequência e dia do simulado mudam quais dias têm blocos: regeram a semana.
+  const setMockEveryWeeks = useCallback(
+    (mockEveryWeeks: number) => applySettings((settings) => ({ ...settings, mockEveryWeeks })),
+    [applySettings],
+  );
+
+  const setMockDay = useCallback(
+    (mockDay: number) => applySettings((settings) => ({ ...settings, mockDay })),
+    [applySettings],
+  );
+
+  const addMockExam = useCallback(
+    (results: Record<string, MockResult>) => {
+      // Mesmo esquema das questões: id provisório até o banco devolver o definitivo.
+      const optimistic: MockExam = {
+        id: `${persist ? PENDING_ID_PREFIX : "local-"}${++pendingIds.current}`,
+        takenOn: todayDate,
+        results,
+      };
+      mutate(
+        (s) => ({ ...s, mockExams: [...s.mockExams, optimistic] }),
+        (s) => ({ ...s, mockExams: s.mockExams.filter((e) => e !== optimistic) }),
+        () => addMockExamAction(results),
+        (s, saved) => ({ ...s, mockExams: s.mockExams.map((e) => (e === optimistic ? saved : e)) }),
+      );
+    },
+    [mutate, todayDate, persist],
+  );
+
+  const deleteMockExam = useCallback(
+    (id: string) => {
+      if (id.startsWith(PENDING_ID_PREFIX)) return;
+      const existing = stateRef.current.mockExams.find((e) => e.id === id);
+      if (!existing) return;
+
+      mutate(
+        (s) => ({ ...s, mockExams: s.mockExams.filter((e) => e.id !== id) }),
+        (s) => ({ ...s, mockExams: [...s.mockExams, existing] }),
+        () => deleteMockExamAction(id),
+      );
+    },
+    [mutate],
+  );
+
   const today = useMemo(() => fromIsoDate(todayDate), [todayDate]);
   const todayIso = isoWeekday(today);
 
@@ -365,9 +518,54 @@ export function useStudyCycle(
     [state.week, checked],
   );
 
+  const topicAccuracy = useMemo(() => topicsByAccuracy(state.questionLogs), [state.questionLogs]);
+
   const reviews = useMemo(
-    () => reviewsForDay(studied, state.reviewLogs, todayDate),
-    [studied, state.reviewLogs, todayDate],
+    () => reviewsForDay(studied, state.reviewLogs, todayDate, weakTopicKeys(topicAccuracy)),
+    [studied, state.reviewLogs, todayDate, topicAccuracy],
+  );
+
+  // Atrasados marcados hoje continuam na lista, para dar para desfazer.
+  const checkedToday = useMemo(
+    () => checkedBlocks(state.studyLogs.filter((log) => log.studiedOn === todayDate)),
+    [state.studyLogs, todayDate],
+  );
+  const overdue = useMemo(
+    () =>
+      overdueBlocks(
+        state.week,
+        state.settings.activeDays,
+        todayDate,
+        (key) => !checked.has(key) || checkedToday.has(key),
+      ),
+    [state.week, state.settings.activeDays, todayDate, checked, checkedToday],
+  );
+
+  const cycleEnd = useMemo(
+    () => projectCycleEnd(state, checked, todayDate),
+    [state, checked, todayDate],
+  );
+
+  // Testa mais blocos por dia regerando a semana: só depende do cronograma e das configurações.
+  const examOutlook = useMemo(
+    () =>
+      calcExamOutlook(
+        { settings: state.settings, pointers: state.pointers, week: state.week },
+        checked,
+        todayDate,
+      ),
+    [state.settings, state.pointers, state.week, checked, todayDate],
+  );
+
+  const isMockDay =
+    !!state.week && mockDayOfWeek(state.settings, state.week.weekStart) === todayIso;
+
+  const pendingMock = useMemo(
+    () =>
+      state.week
+        ? calcPendingMock(state.settings, state.week.weekStart, todayDate, state.mockExams)
+        : null,
+    [state.settings, state.week, todayDate, state.mockExams],
   );
 
   const dismissError = useCallback(() => setError(null), []);
@@ -384,6 +582,11 @@ export function useStudyCycle(
     manual,
     checked,
     reviews,
+    overdue,
+    cycleEnd,
+    examOutlook,
+    topicAccuracy,
+    pendingMock,
     saving,
     error,
     dismissError,
@@ -396,5 +599,13 @@ export function useStudyCycle(
     setBlocksPerDay,
     setWeight,
     resetWeights,
+    replanCycle,
+    setExamDate,
+    setMockEveryWeeks,
+    setMockDay,
+    advanceOneBlock,
+    isMockDay,
+    addMockExam,
+    deleteMockExam,
   };
 }

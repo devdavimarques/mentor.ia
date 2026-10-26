@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 
-import { currentWeekStart, todayIsoDate } from "@/lib/date";
+import { replanCycle, syncCycle } from "@/lib/cycle";
+import { todayIsoDate } from "@/lib/date";
 import {
   clearTopicStudies,
   deleteQuestionLog,
@@ -13,11 +14,14 @@ import {
   unmarkBlock,
   unmarkReview,
 } from "@/lib/db/logs";
+import { deleteMockExam, insertMockExam } from "@/lib/db/mock-exams";
 import { findProfileCredentials } from "@/lib/db/profiles";
 import { loadStudyState, saveSchedule } from "@/lib/db/study-state";
+import { mockResultsError, parseMockResults } from "@/lib/mock-exams";
+import { checkedBlocks } from "@/lib/progress";
 import { questionLogError } from "@/lib/questions";
 import { isReviewStage } from "@/lib/reviews";
-import { regenerateWeek } from "@/lib/schedule";
+import { advanceBlock, regenerateWeek } from "@/lib/schedule";
 import {
   isIsoDate,
   isKnownLesson,
@@ -31,6 +35,7 @@ import { clearSession, isProfileId, writeGuestSession, writeProfileSession } fro
 import { currentProfile } from "@/lib/study-session";
 import type {
   BlockRef,
+  MockExam,
   QuestionLog,
   ReviewStage,
   ScheduleSnapshot,
@@ -250,6 +255,106 @@ export async function deleteQuestionsAction(id: string): Promise<ActionResult> {
 }
 
 /**
+ * Data da prova. Diferente das outras configurações, não mexe no cronograma:
+ * só é gravada.
+ */
+export async function updateExamDateAction(
+  examDate: unknown,
+): Promise<ActionResult<string | null>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    if (examDate !== null && !isIsoDate(examDate)) return { ok: false, error: "Data inválida." };
+
+    const state = await loadStudyState(profile.id);
+    const { snapshot } = syncCycle(state, todayIsoDate());
+    await saveSchedule(profile.id, { ...snapshot, settings: { ...snapshot.settings, examDate } });
+    return { ok: true, data: examDate };
+  } catch (error) {
+    return fail("updateExamDate", error);
+  }
+}
+
+/**
+ * "Adiantar um bloco" (dia de simulado): traz o próximo bloco da fila para
+ * hoje. Como as configurações, recalculado aqui a partir do estado gravado.
+ */
+export async function advanceBlockAction(): Promise<ActionResult<ScheduleSnapshot>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+
+    const today = todayIsoDate();
+    const state = await loadStudyState(profile.id);
+    const { snapshot: current } = syncCycle(state, today);
+    const advanced = advanceBlock(current, checkedBlocks(state.studyLogs), today);
+    const snapshot = { ...current, ...advanced };
+
+    await saveSchedule(profile.id, snapshot);
+    return { ok: true, data: snapshot };
+  } catch (error) {
+    return fail("advanceBlock", error);
+  }
+}
+
+/** Lança um simulado feito hoje. */
+export async function addMockExamAction(rawResults: unknown): Promise<ActionResult<MockExam>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+
+    const results = parseMockResults(rawResults);
+    // O parse descarta o que não serve; num lançamento, isso é erro, não silêncio.
+    if (!isRecord(rawResults) || Object.keys(rawResults).length !== Object.keys(results).length) {
+      return { ok: false, error: "Resultado do simulado inválido." };
+    }
+    const invalid = mockResultsError(results);
+    if (invalid) return { ok: false, error: invalid };
+
+    return { ok: true, data: await insertMockExam(profile.id, todayIsoDate(), results) };
+  } catch (error) {
+    return fail("addMockExam", error);
+  }
+}
+
+export async function deleteMockExamAction(id: string): Promise<ActionResult> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    if (!isUuid(id)) return { ok: false, error: "Simulado inválido." };
+
+    await deleteMockExam(profile.id, id);
+    return { ok: true, data: null };
+  } catch (error) {
+    return fail("deleteMockExam", error);
+  }
+}
+
+/**
+ * Botão "Replanejar ciclo": encaixa todas as aulas atrasadas no começo da fila
+ * de hoje, sem esperar os 3 dias de estudo. Não toca nos registros de estudo,
+ * então o progresso não muda. Como nas configurações, o cronograma é
+ * recalculado aqui a partir do estado gravado.
+ */
+export async function replanCycleAction(): Promise<ActionResult<ScheduleSnapshot>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+
+    const today = todayIsoDate();
+    const state = await loadStudyState(profile.id);
+    const checked = checkedBlocks(state.studyLogs);
+    const { snapshot: current, changed } = syncCycle(state, today);
+    const { snapshot, moved } = replanCycle(current, checked, today, true);
+
+    if (changed || moved > 0) await saveSchedule(profile.id, snapshot);
+    return { ok: true, data: snapshot };
+  } catch (error) {
+    return fail("replanCycle", error);
+  }
+}
+
+/**
  * Aplica novas configurações e regera a semana.
  *
  * O cronograma é recalculado no servidor a partir do estado gravado — o
@@ -265,9 +370,11 @@ export async function updateSettingsAction(
     if (!profile) return { ok: false, error: SESSION_EXPIRED };
 
     const requested = parseSettings(rawSettings);
+    const today = todayIsoDate();
     const state = await loadStudyState(profile.id);
-    const weekStart = state.week?.weekStart ?? currentWeekStart();
-    const snapshot = regenerateWeek(state, requested, weekStart);
+    // Se a semana virou desde que a página abriu, a troca vale para a nova.
+    const { snapshot: current } = syncCycle(state, today);
+    const snapshot = regenerateWeek(current, requested, checkedBlocks(state.studyLogs), today);
 
     await saveSchedule(profile.id, snapshot);
     return { ok: true, data: snapshot };
