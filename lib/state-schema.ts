@@ -99,7 +99,7 @@ export function parseSettings(value: unknown): Settings {
     activeDays,
     blocksPerDay,
     weights: parseWeights(value.weights),
-    weightBase: parsePointers(value.weightBase),
+    weightBase: parsePointers(value.weightBase, { allowNegative: true }),
     examDate: isIsoDate(value.examDate) ? value.examDate : null,
     // Configurações gravadas antes dos simulados não têm o campo: vale o padrão.
     mockEveryWeeks: MOCK_EVERY_WEEKS_OPTIONS.includes(
@@ -111,12 +111,19 @@ export function parseSettings(value: unknown): Settings {
   };
 }
 
-export function parsePointers(value: unknown): Pointers {
+/**
+ * `allowNegative` é para `weightBase`: aula devolvida à matéria (fila por
+ * matéria) desconta dela também, e a base pode ficar abaixo de zero.
+ */
+export function parsePointers(
+  value: unknown,
+  { allowNegative = false }: { allowNegative?: boolean } = {},
+): Pointers {
   if (!isRecord(value)) return {};
 
   const pointers: Pointers = {};
   for (const [id, pointer] of Object.entries(value)) {
-    if (findSubject(id) && Number.isInteger(pointer) && (pointer as number) >= 0) {
+    if (findSubject(id) && Number.isInteger(pointer) && (allowNegative || (pointer as number) >= 0)) {
       pointers[id] = pointer as number;
     }
   }

@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 
-import { replanCycle, syncCycle } from "@/lib/cycle";
+import { syncCycle } from "@/lib/cycle";
 import { todayIsoDate } from "@/lib/date";
 import {
   clearTopicStudies,
@@ -327,30 +327,6 @@ export async function deleteMockExamAction(id: string): Promise<ActionResult> {
     return { ok: true, data: null };
   } catch (error) {
     return fail("deleteMockExam", error);
-  }
-}
-
-/**
- * Botão "Replanejar ciclo": encaixa todas as aulas atrasadas no começo da fila
- * de hoje, sem esperar os 3 dias de estudo. Não toca nos registros de estudo,
- * então o progresso não muda. Como nas configurações, o cronograma é
- * recalculado aqui a partir do estado gravado.
- */
-export async function replanCycleAction(): Promise<ActionResult<ScheduleSnapshot>> {
-  try {
-    const profile = await currentProfile();
-    if (!profile) return { ok: false, error: SESSION_EXPIRED };
-
-    const today = todayIsoDate();
-    const state = await loadStudyState(profile.id);
-    const checked = checkedBlocks(state.studyLogs);
-    const { snapshot: current, changed } = syncCycle(state, today);
-    const { snapshot, moved } = replanCycle(current, checked, today, true);
-
-    if (changed || moved > 0) await saveSchedule(profile.id, snapshot);
-    return { ok: true, data: snapshot };
-  } catch (error) {
-    return fail("replanCycle", error);
   }
 }
 

@@ -1,4 +1,4 @@
-import { dateOfWeekday, fromIsoDate, isoWeekday, toIsoDate } from "./date";
+import { dateOfWeekday, toIsoDate } from "./date";
 import { blockKey } from "./progress";
 import { daysBetween } from "./reviews";
 import { getSubject, SUBJECTS } from "./subjects";
@@ -11,9 +11,6 @@ import type {
   Subject,
   WeekSchedule,
 } from "./types";
-
-/** Dias de estudo de atraso a partir dos quais a aula volta para a fila. */
-export const REPLAN_AFTER_STUDY_DAYS = 3;
 
 interface SlotAllocation {
   id: string;
@@ -115,21 +112,6 @@ export function blockDate(weekStart: string, day: number): string {
 /** Dia ISO de `date` na semana que começa em `weekStart` (8 ou mais = semana já passou). */
 export function dayInWeek(weekStart: string, date: string): number {
   return daysBetween(weekStart, date) + 1;
-}
-
-/**
- * Quantos dias de estudo uma aula programada para `due` já ficou para trás em
- * `today`: os dias ativos depois de `due`, até hoje inclusive. Folga não conta
- * — aula perdida no sábado, com domingo livre, chega a 3 na quarta.
- */
-export function studyDaysLate(due: string, today: string, activeDays: readonly number[]): number {
-  const span = daysBetween(due, today);
-  const dueDay = isoWeekday(fromIsoDate(due));
-  let count = 0;
-  for (let offset = 1; offset <= span; offset++) {
-    if (activeDays.includes(((dueDay - 1 + offset) % 7) + 1)) count++;
-  }
-  return count;
 }
 
 /** Segunda-feira de referência: as semanas de simulado são contadas a partir dela. */
@@ -306,7 +288,7 @@ interface CycleSchedule {
  * Abre a semana `weekStart` depois da semana guardada. Nada do que ficou sem
  * fazer some: o que foi empurrado para além do fim dela (`spill`) abre a nova
  * semana, e os blocos que ficaram sem marcar viram atrasados (`late`) até
- * serem feitos ou voltarem para a fila em `replanOverdue`.
+ * serem feitos ou voltarem para a fila da matéria em `relayoutSubjects`.
  */
 export function advanceWeek(
   previous: CycleSchedule,
@@ -335,86 +317,156 @@ export function advanceWeek(
 }
 
 /**
- * Replanejamento automático: aula sem fazer há `REPLAN_AFTER_STUDY_DAYS` dias
- * de estudo sai do dia em que estava e vira o primeiro bloco livre de hoje (ou
- * do próximo dia de estudo). Tudo o que vinha depois anda uma posição, e o que
- * passar do fim da semana vai para `spill`, abrindo a seguinte — o fim do
- * ciclo atrasa um bloco por aula replanejada.
+ * Fila por matéria: cada matéria segue a ordem do curso e só anda quando a
+ * aula é feita. As aulas ainda sem fazer da matéria — atrasadas (de dias que
+ * passaram ou de outras semanas) e futuras — são recolocadas em ordem nos
+ * lugares dela de hoje em diante (e no `spill`). A aula perdida vira o próximo
+ * bloco da matéria; as seguintes andam uma posição; as outras matérias não mudam.
  *
- * Blocos já marcados não se movem. A aula replanejada que ficar de novo 3 dias
- * sem fazer volta outra vez para a fila: ela nunca sai até ser concluída.
+ * O que não couber:
+ * - aula atrasada fica onde está (aba Atrasadas) até a matéria ter um bloco
+ *   livre — na semana seguinte, se for o caso;
+ * - aula futura empurrada para fora é devolvida à matéria (o ponteiro volta),
+ *   e entra de novo no próximo bloco dela que for gerado. `weightBase` volta
+ *   junto, para o equilíbrio por peso continuar contando o bloco como entregue:
+ *   senão a matéria atrasada ganharia mais blocos para "recuperar", tirando das
+ *   outras. Se não for a última distribuída (caso raro), fica em `spill`.
  *
- * `all` (botão "Replanejar ciclo") leva todos os atrasados, sem esperar os 3 dias.
+ * Blocos marcados não se movem. Roda no servidor ao abrir o app (`syncCycle`)
+ * e ao trocar configurações; `moved` conta as atrasadas que voltaram à fila.
  */
-export function replanOverdue(
-  week: WeekSchedule,
-  activeDays: readonly number[],
+export function relayoutSubjects(
+  cycle: { settings: Settings; pointers: Pointers; week: WeekSchedule },
   checked: ReadonlySet<string>,
   today: string,
-  { all = false }: { all?: boolean } = {},
-): { week: WeekSchedule; moved: number } {
+): { settings: Settings; pointers: Pointers; week: WeekSchedule; moved: number } {
+  const { week } = cycle;
   const todayDay = dayInWeek(week.weekStart, today);
-  const isDue = (weekStart: string, day: number, block: ScheduledBlock) =>
-    !checked.has(blockKey(weekStart, block)) &&
-    (all ||
-      studyDaysLate(blockDate(weekStart, day), today, activeDays) >= REPLAN_AFTER_STUDY_DAYS);
+  const isOpen = (weekStart: string, block: ScheduledBlock) =>
+    !checked.has(blockKey(weekStart, block));
 
-  // Do mais antigo para o mais novo: atrasados de outras semanas, depois desta.
-  const due: ScheduledBlock[] = [];
-  const late = week.late.filter((b) => {
-    if (!isDue(b.weekStart, b.day, b)) return true;
-    // Veio de outra semana: já conta nos ponteiros de lá.
-    due.push({
-      subjectId: b.subjectId,
-      lessonIndex: b.lessonIndex,
-      lap: b.lap,
-      carried: true,
-      replanned: true,
-    });
-    return false;
+  type Origin = { late: number } | { day: number; index: number; past: boolean } | { spill: number };
+  type Slot = { day: number; index: number } | { spill: number };
+  const pending = new Map<string, { block: ScheduledBlock; origin: Origin }[]>();
+  const slots = new Map<string, Slot[]>();
+  const add = <T>(map: Map<string, T[]>, key: string, value: T) => {
+    const list = map.get(key);
+    if (list) list.push(value);
+    else map.set(key, [value]);
+  };
+
+  week.late.forEach((block, i) => {
+    if (isOpen(block.weekStart, block)) add(pending, block.subjectId, { block, origin: { late: i } });
   });
-  const days = week.days.map((day) =>
-    day.day >= todayDay
-      ? day
-      : {
-          ...day,
-          blocks: day.blocks.filter((b) => {
-            if (!isDue(week.weekStart, day.day, b)) return true;
-            due.push({ ...b, replanned: true });
-            return false;
-          }),
-        },
-  );
-
-  if (due.length === 0) return { week, moved: 0 };
-
-  // Os lugares ainda livres (não marcados) de hoje em diante, na ordem.
-  const slots: [day: number, index: number][] = [];
-  const queue: ScheduledBlock[] = [];
-  days.forEach((day, d) => {
-    if (day.day < todayDay) return;
-    day.blocks.forEach((block, i) => {
-      if (checked.has(blockKey(week.weekStart, block))) return;
-      slots.push([d, i]);
-      queue.push(block);
+  week.days.forEach((day, d) => {
+    const past = day.day < todayDay;
+    day.blocks.forEach((block, index) => {
+      if (!isOpen(week.weekStart, block)) return;
+      add(pending, block.subjectId, { block, origin: { day: d, index, past } });
+      if (!past) add(slots, block.subjectId, { day: d, index });
     });
   });
-
-  const sequence = [...due, ...queue];
-  const nextDays = days.map((day) => ({ ...day, blocks: [...day.blocks] }));
-  slots.forEach(([d, i], position) => {
-    nextDays[d].blocks[i] = sequence[position];
+  week.spill.forEach((block, i) => {
+    add(pending, block.subjectId, { block, origin: { spill: i } });
+    add(slots, block.subjectId, { spill: i });
   });
+
+  const days: (ScheduledBlock | null)[][] = week.days.map((day) => [...day.blocks]);
+  const spill: (ScheduledBlock | null)[] = [...week.spill];
+  const lateKept = new Set(week.late.map((_b, i) => i));
+  const pointers: Pointers = { ...cycle.pointers };
+  const weightBase: Pointers = { ...cycle.settings.weightBase };
+  const pushedOut: ScheduledBlock[] = [];
+  let moved = 0;
+
+  for (const [subjectId, entries] of pending) {
+    const subject = getSubject(subjectId);
+    const ordered = [...entries].sort(
+      (a, b) => sequenceIndex(subject, a.block) - sequenceIndex(subject, b.block),
+    );
+    const subjectSlots = slots.get(subjectId) ?? [];
+
+    // Atrasadas que entram: saem do lugar de origem.
+    ordered.slice(0, subjectSlots.length).forEach(({ origin }) => {
+      if ("late" in origin) lateKept.delete(origin.late);
+      else if ("day" in origin && origin.past) days[origin.day][origin.index] = null;
+    });
+
+    subjectSlots.forEach((slot, k) => {
+      const { block, origin } = ordered[k];
+      const fromLate = "late" in origin;
+      const wasLate = fromLate || ("day" in origin && origin.past);
+      if (wasLate) moved++;
+      const placed: ScheduledBlock = fromLate
+        ? // De outra semana: já conta nos ponteiros de lá.
+          {
+            subjectId,
+            lessonIndex: block.lessonIndex,
+            lap: block.lap,
+            carried: true,
+            replanned: true,
+          }
+        : wasLate
+          ? { ...block, replanned: true }
+          : block;
+      if ("spill" in slot) spill[slot.spill] = placed;
+      else days[slot.day][slot.index] = placed;
+    });
+
+    // Futuras empurradas para fora, da última para a primeira: voltam à matéria.
+    const leftover = ordered
+      .slice(subjectSlots.length)
+      .filter(({ origin }) => !("late" in origin) && !("day" in origin && origin.past))
+      .map(({ block }) => block)
+      .reverse();
+    for (const block of leftover) {
+      const pointer = pointers[subjectId] ?? 0;
+      if (!block.carried && sequenceIndex(subject, block) === pointer - 1) {
+        pointers[subjectId] = pointer - 1;
+        weightBase[subjectId] = (weightBase[subjectId] ?? 0) - 1;
+      } else {
+        pushedOut.unshift(block);
+      }
+    }
+  }
 
   return {
+    settings: { ...cycle.settings, weightBase },
+    pointers,
     week: {
       ...week,
-      days: nextDays,
-      late,
-      spill: [...sequence.slice(slots.length), ...week.spill],
+      days: week.days.map((day, d) => ({
+        ...day,
+        blocks: days[d].filter((b): b is ScheduledBlock => b !== null),
+      })),
+      late: week.late.filter((_b, i) => lateKept.has(i)),
+      spill: [...spill.filter((b): b is ScheduledBlock => b !== null), ...pushedOut],
     },
-    moved: due.length,
+    moved,
   };
+}
+
+/**
+ * Próxima aula de cada matéria: a menor posição na sequência entre as ainda
+ * sem fazer (atrasadas, da semana e do `spill`). Uma aula só pode ser marcada
+ * quando é a próxima da matéria.
+ */
+export function nextLessons(
+  week: WeekSchedule | null,
+  checked: ReadonlySet<string>,
+): ReadonlyMap<string, number> {
+  const next = new Map<string, number>();
+  if (!week) return next;
+  const consider = (weekStart: string, block: ScheduledBlock) => {
+    if (checked.has(blockKey(weekStart, block))) return;
+    const position = sequenceIndex(getSubject(block.subjectId), block);
+    const current = next.get(block.subjectId);
+    if (current === undefined || position < current) next.set(block.subjectId, position);
+  };
+  week.late.forEach((b) => consider(b.weekStart, b));
+  week.days.forEach((day) => day.blocks.forEach((b) => consider(week.weekStart, b)));
+  week.spill.forEach((b) => consider(week.weekStart, b));
+  return next;
 }
 
 /** Um bloco atrasado, desta semana ou de outra, como a aba Hoje mostra. */
@@ -424,18 +476,15 @@ export interface OverdueBlock {
   weekStart: string;
   /** Dia em que estava programado. */
   dueOn: string;
-  /** Dias de estudo de atraso. */
-  late: number;
 }
 
 /**
  * Blocos atrasados: os de dias anteriores desta semana e os de semanas
- * passadas que ainda não voltaram para a fila. `include` decide quais dos
- * marcados aparecem (a aba Hoje mantém os marcados hoje, para poder desfazer).
+ * passadas que ainda esperam um bloco livre da matéria. `include` decide quais
+ * dos marcados aparecem (a aba mantém os marcados hoje, para poder desfazer).
  */
 export function overdueBlocks(
   week: WeekSchedule | null,
-  activeDays: readonly number[],
   today: string,
   include: (key: string) => boolean,
 ): OverdueBlock[] {
@@ -449,10 +498,7 @@ export function overdueBlocks(
       .flatMap((day) => day.blocks.map((b) => ({ block: b, weekStart: week.weekStart, day: day.day }))),
   ]
     .filter(({ block, weekStart }) => include(blockKey(weekStart, block)))
-    .map(({ block, weekStart, day }) => {
-      const dueOn = blockDate(weekStart, day);
-      return { block, weekStart, dueOn, late: studyDaysLate(dueOn, today, activeDays) };
-    });
+    .map(({ block, weekStart, day }) => ({ block, weekStart, dueOn: blockDate(weekStart, day) }));
 }
 
 function sameWeights(a: Readonly<Record<string, number>>, b: Readonly<Record<string, number>>) {
@@ -514,9 +560,6 @@ export function regenerateWeek(
     days: [...old.days.filter((d) => d.day < fromDay), ...generated.week.days],
     spill: generated.week.spill,
   };
-  return {
-    settings,
-    pointers: generated.pointers,
-    week: replanOverdue(week, settings.activeDays, checked, today).week,
-  };
+  const relaid = relayoutSubjects({ settings, pointers: generated.pointers, week }, checked, today);
+  return { settings: relaid.settings, pointers: relaid.pointers, week: relaid.week };
 }

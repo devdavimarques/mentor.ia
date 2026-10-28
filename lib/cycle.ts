@@ -6,7 +6,7 @@ import {
   dayInWeek,
   generateWeek,
   regenerateWeek,
-  replanOverdue,
+  relayoutSubjects,
   sequenceIndex,
 } from "./schedule";
 import { daysBetween } from "./reviews";
@@ -35,9 +35,8 @@ interface CycleSchedule {
  *
  * Segue o cronograma como está: a semana atual de hoje em diante, o que foi
  * empurrado para a seguinte e, depois, semanas simuladas com as mesmas funções
- * que geram as de verdade. Os atrasados ainda não replanejados contam como
- * feitos a tempo; quando passam de 3 dias de estudo, entram na fila e a
- * previsão anda.
+ * que geram as de verdade. Os atrasados que ainda esperam um bloco livre da
+ * matéria contam como feitos a tempo; quando entram na fila dela, a previsão anda.
  */
 export function projectCycleEnd(
   cycle: CycleSchedule,
@@ -151,9 +150,9 @@ export function examOutlook(
 }
 
 /**
- * Põe os atrasados de volta na fila (`replanOverdue`) e anota a mudança na
- * previsão de fim do ciclo, para a aba Atrasadas avisar. Sem `all`, só os que
- * chegaram a 3 dias de estudo; com `all` (botão "Replanejar ciclo"), todos.
+ * Põe cada matéria em dia (`relayoutSubjects`): a aula perdida vai para o
+ * próximo bloco da matéria, e as seguintes andam. Quando alguma atrasada volta
+ * à fila, anota a mudança na previsão de fim do ciclo para a aba Atrasadas.
  *
  * Só reorganiza o cronograma: registros de estudo e blocos marcados não mudam,
  * então o progresso fica igual. Mesma função no servidor e no cliente.
@@ -162,14 +161,18 @@ export function replanCycle(
   snapshot: ScheduleSnapshot,
   checked: ReadonlySet<string>,
   today: string,
-  all = false,
-): { snapshot: ScheduleSnapshot; moved: number } {
-  const { settings, pointers, week } = snapshot;
-  const replanned = replanOverdue(week, settings.activeDays, checked, today, { all });
-  if (replanned.moved === 0) return { snapshot, moved: 0 };
+): { snapshot: ScheduleSnapshot; changed: boolean } {
+  const { week } = snapshot;
+  const relaid = relayoutSubjects(snapshot, checked, today);
+  const { settings, pointers } = relaid;
+  const changed =
+    JSON.stringify(relaid.week) !== JSON.stringify(week) ||
+    JSON.stringify(pointers) !== JSON.stringify(snapshot.pointers);
+  if (!changed) return { snapshot, changed: false };
+  if (relaid.moved === 0) return { snapshot: { settings, pointers, week: relaid.week }, changed: true };
 
   const before = projectCycleEnd(snapshot, checked, today);
-  const after = projectCycleEnd({ settings, pointers, week: replanned.week }, checked, today);
+  const after = projectCycleEnd({ settings, pointers, week: relaid.week }, checked, today);
   // Dois replanejamentos no mesmo dia viram um aviso só, do primeiro "antes" ao último "depois".
   const earlier = week.replan?.on === today ? week.replan : null;
   return {
@@ -177,23 +180,23 @@ export function replanCycle(
       settings,
       pointers,
       week: {
-        ...replanned.week,
+        ...relaid.week,
         replan: {
           on: today,
-          moved: (earlier?.moved ?? 0) + replanned.moved,
+          moved: (earlier?.moved ?? 0) + relaid.moved,
           endBefore: earlier ? earlier.endBefore : (before?.date ?? null),
           endAfter: after?.date ?? null,
         },
       },
     },
-    moved: replanned.moved,
+    changed: true,
   };
 }
 
 /**
- * Deixa o ciclo em dia para `today`: abre a semana nova se ela virou e
- * replaneja o que passou de 3 dias de estudo de atraso. `changed` diz se há
- * algo a gravar. Roda no servidor, ao abrir o app e antes de mexer no ciclo.
+ * Deixa o ciclo em dia para `today`: abre a semana nova se ela virou e põe
+ * cada matéria em dia, com as aulas perdidas no próximo bloco dela. `changed`
+ * diz se há algo a gravar. Roda no servidor, ao abrir o app e antes de mexer no ciclo.
  */
 export function syncCycle(
   state: StudyState,
@@ -211,5 +214,5 @@ export function syncCycle(
   }
 
   const replanned = replanCycle({ settings, pointers, week }, checked, today);
-  return { snapshot: replanned.snapshot, changed: changed || replanned.moved > 0 };
+  return { snapshot: replanned.snapshot, changed: changed || replanned.changed };
 }

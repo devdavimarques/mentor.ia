@@ -9,7 +9,6 @@ import {
   deleteMockExamAction,
   deleteQuestionsAction,
   markReviewAction,
-  replanCycleAction,
   setTopicStudiedAction,
   toggleBlockAction,
   unmarkReviewAction,
@@ -20,7 +19,6 @@ import {
 import {
   examOutlook as calcExamOutlook,
   projectCycleEnd,
-  replanCycle as replanSchedule,
   type CycleEnd,
   type ExamOutlook,
 } from "@/lib/cycle";
@@ -46,6 +44,7 @@ import { reviewsForDay, type ReviewItem } from "@/lib/reviews";
 import {
   advanceBlock,
   mockDayOfWeek,
+  nextLessons as calcNextLessons,
   overdueBlocks,
   regenerateWeek,
   type OverdueBlock,
@@ -84,6 +83,8 @@ export interface StudyCycle {
   reviews: ReviewItem[];
   /** Blocos atrasados ainda sem fazer, e os atrasados feitos hoje (para desfazer). */
   overdue: OverdueBlock[];
+  /** Próxima aula de cada matéria (posição na sequência): só ela pode ser marcada. */
+  nextLessons: ReadonlyMap<string, number>;
   /** Previsão de fim do ciclo pelo cronograma atual. */
   cycleEnd: CycleEnd | null;
   /** Prazo até a prova, se a data estiver definida. */
@@ -107,8 +108,6 @@ export interface StudyCycle {
   setWeight: (subjectId: string, weight: number) => void;
   /** Volta todos os pesos ao padrão. */
   resetWeights: () => void;
-  /** Encaixa todas as aulas atrasadas no começo da fila de hoje, sem mexer no progresso. */
-  replanCycle: () => void;
   /** Data da prova (`null` apaga). Não mexe no cronograma. */
   setExamDate: (date: string | null) => void;
   /** Frequência e dia do simulado. Regeram a semana de hoje em diante. */
@@ -402,33 +401,12 @@ export function useStudyCycle(
     [applySettings],
   );
 
-  const replanCycle = useCallback(() => {
-    const previous = stateRef.current;
-    const week = previous.week;
-    if (!week) return;
-
-    const optimistic = replanSchedule(
-      { settings: previous.settings, pointers: previous.pointers, week },
-      checkedBlocks(previous.studyLogs),
-      todayDate,
-      true,
-    );
-    if (optimistic.moved === 0) return;
-
-    mutate(
-      (s) => ({ ...s, ...optimistic.snapshot }),
-      (s) => ({ ...s, pointers: previous.pointers, week: previous.week }),
-      () => replanCycleAction(),
-      (s, snapshot) => ({ ...s, ...snapshot }),
-    );
-  }, [mutate, todayDate]);
-
   const advanceOneBlock = useCallback(() => {
     const previous = stateRef.current;
     const week = previous.week;
     if (!week) return;
 
-    // Mesma função pura do servidor, como no replanejamento.
+    // Mesma função pura do servidor, como nas configurações.
     const optimistic = advanceBlock(
       { settings: previous.settings, pointers: previous.pointers, week },
       checkedBlocks(previous.studyLogs),
@@ -534,12 +512,13 @@ export function useStudyCycle(
     () =>
       overdueBlocks(
         state.week,
-        state.settings.activeDays,
         todayDate,
         (key) => !checked.has(key) || checkedToday.has(key),
       ),
-    [state.week, state.settings.activeDays, todayDate, checked, checkedToday],
+    [state.week, todayDate, checked, checkedToday],
   );
+
+  const nextLessons = useMemo(() => calcNextLessons(state.week, checked), [state.week, checked]);
 
   const cycleEnd = useMemo(
     () => projectCycleEnd(state, checked, todayDate),
@@ -583,6 +562,7 @@ export function useStudyCycle(
     checked,
     reviews,
     overdue,
+    nextLessons,
     cycleEnd,
     examOutlook,
     topicAccuracy,
@@ -599,7 +579,6 @@ export function useStudyCycle(
     setBlocksPerDay,
     setWeight,
     resetWeights,
-    replanCycle,
     setExamDate,
     setMockEveryWeeks,
     setMockDay,

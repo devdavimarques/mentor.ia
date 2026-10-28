@@ -124,11 +124,11 @@ mock_exams      profile_id, taken_on,          Simulados: results (jsonb) é
   cobre. Tópico sem aula no curso ganha um bloco de "estudo do tópico".
 - **Marcar um bloco** registra que você fez aquela aula **hoje**. A marcação é do bloco: na 2ª
   volta os blocos começam desmarcados de novo.
-- **Aula atrasada não some.** Bloco de um dia que já passou e ficou sem marcar aparece na aba
-  **Atrasadas** (com contador na própria aba), inclusive depois da virada de semana, até ser
-  feito. Com **3 dias de estudo** de atraso (folga não conta), o cronograma se replaneja
-  sozinho; o botão **Replanejar ciclo** faz isso na hora para todas: veja
-  [Replanejamento](#replanejamento-de-aulas-atrasadas).
+- **Cada matéria segue a ordem do curso.** Uma aula só pode ser marcada quando é a próxima da
+  matéria (as seguintes aparecem com "faça antes: …"), e a aula que você não fez vai sozinha
+  para o **próximo bloco da matéria**, com as seguintes andando uma posição. As outras matérias
+  não mudam. Enquanto a matéria não tem bloco livre, a aula espera na aba **Atrasadas** (com
+  contador na própria aba): veja [Fila por matéria](#fila-por-matéria).
 - **Progresso** = tópicos estudados. Um tópico fica estudado quando **todas as aulas dele**
   foram feitas, ou quando é marcado à mão na aba Matérias (estudo por fora).
 - **Revisões** vencem 1, 7 e 30 dias depois de o tópico ficar estudado e aparecem na aba Hoje
@@ -256,7 +256,7 @@ distorce **sempre na mesma direção**. Com 18 blocos para 13 matérias, quase t
 compensar. Com a correção por déficit, a proporção acumulada converge para os pesos do edital:
 desvio máximo de **0,27 pp em 12 semanas** e **0,06 pp em 52 semanas**.
 
-### Replanejamento de aulas atrasadas
+### Fila por matéria
 
 A semana guardada (jsonb `week`) tem, além dos dias, duas filas:
 
@@ -264,21 +264,28 @@ A semana guardada (jsonb `week`) tem, além dos dias, duas filas:
   estavam. Continuam marcáveis (o registro usa a semana original do bloco).
 - `spill`: blocos empurrados para depois do fim da semana. Abrem a semana seguinte.
 
-Quando uma aula sem fazer chega a **3 dias de estudo de atraso** (`REPLAN_AFTER_STUDY_DAYS`), ela
-sai do dia em que estava e vira o **primeiro bloco livre de hoje** (ou do próximo dia de estudo).
-Todos os blocos não marcados que vinham depois andam uma posição; o que passa do fim da semana
-vai para `spill`. Blocos já marcados não se movem. A aula replanejada ganha o selo
-"replanejada" e, se ficar de novo 3 dias sem fazer, volta outra vez para a fila.
+Cada matéria segue a ordem do curso e só anda quando a aula é feita (`relayoutSubjects`, em
+[`lib/schedule.ts`](lib/schedule.ts)). As aulas ainda sem fazer da matéria (atrasadas e futuras)
+são recolocadas em ordem nos lugares **dela** de hoje em diante: a aula perdida vira o próximo
+bloco da matéria, as seguintes andam uma posição, e as outras matérias não mudam. Blocos marcados
+não se movem; a aula que voltou à fila ganha o selo "replanejada".
 
-Isso roda no servidor (`syncCycle`, em [`lib/cycle.ts`](lib/cycle.ts)) na primeira visita do dia
-em que for necessário, junto com a virada de semana, e é gravado.
+- Aula atrasada sem lugar livre da matéria no resto da semana espera em `late`/no dia dela (aba
+  Atrasadas) e entra no primeiro bloco da matéria na semana seguinte.
+- Aula futura empurrada para fora é devolvida à matéria: o ponteiro volta e ela é gerada de novo
+  no próximo bloco da matéria. `weightBase` volta junto, para o equilíbrio por peso continuar
+  contando aquele bloco como entregue; sem isso a matéria atrasada ganharia blocos extras para
+  "recuperar", tirando das outras. Por isso `weightBase` pode ficar negativo.
+- O check de uma aula fica travado até ela ser a próxima da matéria (`nextLessons`); desmarcar
+  continua livre.
 
-O botão **Replanejar ciclo**, na aba Atrasadas (`replanCycleAction`), faz o mesmo na hora com
-**todas** as atrasadas, sem esperar os 3 dias. Ele só reorganiza o cronograma: os registros de
-estudo, os blocos marcados e os ponteiros não mudam, então o progresso continua igual.
+Isso roda no servidor (`syncCycle`, em [`lib/cycle.ts`](lib/cycle.ts)) na primeira visita de cada
+dia, junto com a virada de semana, e ao trocar configurações; só reorganiza o cronograma, então
+o progresso não muda. Quando aulas atrasadas voltam à fila, o aviso "Cronograma replanejado
+hoje" na aba Atrasadas mostra a previsão de fim do ciclo antes e depois.
 
-Nos dois casos, o aviso "Cronograma replanejado hoje" na aba Atrasadas mostra a previsão de fim
-do ciclo antes e depois.
+Verificado em simulação de 3 semanas pulando toda a História: ela fica parada na 1ª aula, sem
+aula perdida nem repetida, e as outras matérias andam exatamente como andariam fazendo tudo.
 
 ### Previsão de fim do ciclo
 

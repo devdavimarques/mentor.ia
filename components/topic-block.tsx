@@ -1,14 +1,16 @@
 "use client";
 
-import { Check, ListPlus } from "lucide-react";
+import { Check, ListPlus, Lock } from "lucide-react";
 import { useState } from "react";
 
+import { useNextLessons } from "@/components/lesson-order-context";
 import { QuestionPanel } from "@/components/question-panel";
 import { useQuestions } from "@/components/questions-context";
 import { HotTag, Tag } from "@/components/ui/tag";
 import { topicQuestionStats } from "@/lib/questions";
+import { sequenceIndex } from "@/lib/schedule";
 import { findSubject, lessonPosition, topicCode } from "@/lib/subjects";
-import type { ScheduledBlock } from "@/lib/types";
+import type { ScheduledBlock, Subject } from "@/lib/types";
 
 interface StudyCardProps {
   subjectId: string;
@@ -21,6 +23,8 @@ interface StudyCardProps {
   onToggle: () => void;
   /** Selos ao lado do nome da matéria: "2ª volta", "1ª revisão"… */
   tags?: React.ReactNode;
+  /** Não pode ser marcado ainda: o motivo, ex. "faça antes: Brasil Colônia · aula 1 de 9". */
+  lockedReason?: string | null;
 }
 
 /**
@@ -37,7 +41,10 @@ function StudyCard({
   checked,
   onToggle,
   tags,
+  lockedReason = null,
 }: StudyCardProps) {
+  // Desmarcar continua livre; só marcar fica travado.
+  const locked = !checked && lockedReason !== null;
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   // Desmarcado por fora (ex.: gravação revertida): a pergunta não volta sozinha depois.
@@ -67,13 +74,22 @@ function StudyCard({
         <button
           type="button"
           onClick={() => (checked ? setConfirming(true) : onToggle())}
+          disabled={locked}
           aria-pressed={checked}
-          aria-label={`${checked ? "Desmarcar" : "Marcar como feito"}: ${codes.join(", ")} — ${title}`}
-          className={`relative mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg border-[1.5px] transition-colors before:absolute before:-inset-2 before:content-[''] ${
-            checked ? "bg-success border-success text-white" : "border-line hover:border-accent-text"
+          aria-label={`${checked ? "Desmarcar" : "Marcar como feito"}: ${codes.join(", ")} — ${title}${
+            locked ? ` (${lockedReason})` : ""
+          }`}
+          title={locked ? lockedReason ?? undefined : undefined}
+          className={`relative mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg border-[1.5px] transition-colors before:absolute before:-inset-2 before:content-[''] disabled:cursor-not-allowed ${
+            checked
+              ? "bg-success border-success text-white"
+              : locked
+                ? "border-line bg-surface-alt text-muted"
+                : "border-line hover:border-accent-text"
           }`}
         >
           {checked && <Check size={15} strokeWidth={3} aria-hidden />}
+          {locked && <Lock size={12} aria-hidden />}
         </button>
 
         <div className="min-w-0 flex-1">
@@ -110,6 +126,7 @@ function StudyCard({
             </span>
           )}
           <span className="text-muted mt-2.5 flex flex-wrap items-center gap-1.5 text-xs empty:hidden">
+            {locked && <span className="font-semibold">{lockedReason}</span>}
             {tags}
           </span>
         </div>
@@ -204,9 +221,14 @@ interface LessonBlockProps {
 
 /** Cartão de um bloco do ciclo: uma aula do curso, com o item do edital que ela cobre. */
 export function LessonBlock({ block, checked, onToggle, tags }: LessonBlockProps) {
+  const nextLessons = useNextLessons();
   const subject = findSubject(block.subjectId);
   const lesson = subject?.lessons[block.lessonIndex];
   if (!subject || !lesson) return null;
+
+  const next = nextLessons.get(subject.id);
+  const lockedReason =
+    next !== undefined && sequenceIndex(subject, block) > next ? `faça antes: ${lessonLabel(subject, next)}` : null;
 
   const position = lessonPosition(subject, block.lessonIndex);
   const topicNames = lesson.topics.map((t) => subject.topics[t]).join(" · ");
@@ -222,6 +244,7 @@ export function LessonBlock({ block, checked, onToggle, tags }: LessonBlockProps
       detail={lesson.selfStudy || sameText(topicNames, title) ? undefined : topicNames}
       checked={checked}
       onToggle={onToggle}
+      lockedReason={lockedReason}
       tags={
         <>
           {tags}
@@ -242,6 +265,15 @@ export function LessonBlock({ block, checked, onToggle, tags }: LessonBlockProps
       }
     />
   );
+}
+
+/** "Brasil Colônia · aula 1 de 9" — a aula na posição `pointer` da sequência da matéria. */
+function lessonLabel(subject: Subject, pointer: number): string {
+  const index = pointer % subject.lessons.length;
+  const lesson = subject.lessons[index];
+  const position = lessonPosition(subject, index);
+  const part = !lesson.selfStudy && position.of > 1 ? ` · aula ${position.n} de ${position.of}` : "";
+  return `${lesson.title}${part}`;
 }
 
 interface QuestionsToggleProps {

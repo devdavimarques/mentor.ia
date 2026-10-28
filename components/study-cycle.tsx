@@ -4,6 +4,7 @@ import { Eye, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
+import { LessonOrderProvider } from "@/components/lesson-order-context";
 import { QuestionsProvider } from "@/components/questions-context";
 import { TabBar, TabNav } from "@/components/tab-nav";
 import { OverdueTab } from "@/components/tabs/overdue-tab";
@@ -47,6 +48,7 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     checked,
     reviews,
     overdue,
+    nextLessons,
     cycleEnd,
     examOutlook,
     topicAccuracy,
@@ -63,7 +65,6 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     setBlocksPerDay,
     setWeight,
     resetWeights,
-    replanCycle,
     setExamDate,
     setMockEveryWeeks,
     setMockDay,
@@ -85,6 +86,7 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
 
   return (
     <QuestionsProvider value={questionsApi}>
+      <LessonOrderProvider value={nextLessons}>
       <div className="bg-frame border-line mx-auto min-h-dvh w-full max-w-6xl sm:my-6 sm:min-h-0 sm:rounded-3xl sm:border sm:shadow-2xl sm:shadow-black/20">
         <AppHeader
           guest={guest}
@@ -156,7 +158,6 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
               checked={checked}
               overdue={overdue}
               onToggleBlock={toggleBlock}
-              onReplan={replanCycle}
             />
           )}
 
@@ -211,6 +212,7 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
       </div>
 
       <TabBar active={tab} onChange={setTab} badges={badges} />
+      </LessonOrderProvider>
     </QuestionsProvider>
   );
 }

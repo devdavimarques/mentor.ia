@@ -59,7 +59,7 @@ export interface ScheduledBlock {
    * esta semana não o devolve à matéria.
    */
   carried?: boolean;
-  /** Mudou de dia porque ficou atrasado 3 dias de estudo. */
+  /** Mudou de dia porque ficou sem fazer: foi para o próximo bloco da matéria. */
   replanned?: boolean;
 }
 
@@ -108,6 +108,10 @@ export interface Settings {
    * Ponteiros no momento em que os pesos mudaram pela última vez. O equilíbrio
    * por peso conta só o que foi entregue depois disso — senão aumentar um peso
    * faria a matéria "recuperar" meses de atraso numa semana só.
+   */
+  /**
+   * Também desconta as aulas devolvidas à matéria na fila por matéria, para o
+   * equilíbrio continuar contando o bloco como entregue (pode ficar negativo).
    */
   weightBase: Pointers;
   /** Data provável da prova, `yyyy-mm-dd`, ou `null` se não definida. */
