@@ -400,4 +400,5 @@ export const DEFAULT_SETTINGS: Settings = {
   examDate: null,
   mockEveryWeeks: 2,
   mockDay: 6,
+  mockTargets: {},
 };

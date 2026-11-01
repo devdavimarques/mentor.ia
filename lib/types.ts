@@ -120,6 +120,8 @@ export interface Settings {
   mockEveryWeeks: number;
   /** Dia ISO do simulado (1 = segunda). Nas semanas de simulado, fica sem blocos. */
   mockDay: number;
+  /** Meta de acerto nos simulados, `subjectId` → % (1–100). Matéria sem meta fica de fora. */
+  mockTargets: Record<string, number>;
 }
 
 /** `subjectId` → quantidade de aulas já distribuídas (acumulado entre voltas). */
@@ -184,7 +186,11 @@ export interface MockResult {
 /** Um simulado feito: o resultado de cada matéria objetiva. */
 export interface MockExam {
   id: string;
+  /** Nome livre, ex.: "Simulado 01". */
+  title: string | null;
   takenOn: string;
+  /** Valor de cada questão, igual para todas (ex.: 1,25 numa prova de 80 questões e 100 pontos). */
+  pointsPerQuestion: number;
   /** `subjectId` → resultado. Só matérias com questões feitas. */
   results: Record<string, MockResult>;
 }
@@ -205,6 +211,19 @@ export interface Flashcard {
   lapses: number;
 }
 
+/** Um período de estudo cronometrado (ou lançado à mão). */
+export interface StudySession {
+  id: string;
+  subjectId: string;
+  /** Aula estudada, quando o cronômetro foi ligado num bloco. */
+  lessonIndex: number | null;
+  minutes: number;
+  studiedOn: string;
+}
+
+/** Link de cada aula (`subjectId:lessonIndex` → URL), o mesmo para todos os perfis. */
+export type LessonLinks = Record<string, string>;
+
 export interface StudyState {
   settings: Settings;
   pointers: Pointers;
@@ -214,6 +233,8 @@ export interface StudyState {
   questionLogs: QuestionLog[];
   mockExams: MockExam[];
   flashcards: Flashcard[];
+  studySessions: StudySession[];
+  lessonLinks: LessonLinks;
 }
 
 export type TabId =
@@ -221,6 +242,7 @@ export type TabId =
   | "semana"
   | "atrasadas"
   | "materias"
+  | "simulados"
   | "flashcards"
   | "progresso"
   | "config";

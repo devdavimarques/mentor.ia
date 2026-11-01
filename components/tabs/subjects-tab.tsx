@@ -1,14 +1,16 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { Check, ChevronDown, Link2, Pencil, PlayCircle } from "lucide-react";
+import { useState, type FormEvent } from "react";
 
+import { useLessonLinks } from "@/components/lesson-links-context";
 import { QuestionPanel } from "@/components/question-panel";
 import { useQuestions } from "@/components/questions-context";
 import { getSubjectIcon } from "@/components/subject-icon";
 import { QuestionsToggle } from "@/components/topic-block";
 import { HotTag } from "@/components/ui/tag";
 import { formatShortDate, fromIsoDate } from "@/lib/date";
+import { lessonLinkKey, MAX_LINK_LENGTH, normalizeLessonLink } from "@/lib/lesson-links";
 import {
   subjectProgress,
   topicKey,
@@ -18,7 +20,7 @@ import {
   type StudiedMap,
 } from "@/lib/progress";
 import { topicQuestionStats } from "@/lib/questions";
-import { SUBJECTS, topicCode } from "@/lib/subjects";
+import { lessonPosition, SUBJECTS, topicCode } from "@/lib/subjects";
 import type { Subject } from "@/lib/types";
 
 interface SubjectsTabProps {
@@ -76,6 +78,7 @@ export function SubjectsTab({ studied, lessons, manual, onToggleTopic }: Subject
                   onToggle={() => onToggleTopic(subject.id, index)}
                 />
               ))}
+              <LessonList subject={subject} />
             </div>
           </details>
         );
@@ -186,5 +189,152 @@ function TopicRow({ subject, topicIndex, studiedOn, lessons, manual, onToggle }:
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Aulas do curso da matéria, cada uma com o link (ex.: o vídeo no Drive). O
+ * link vale para todos os perfis e aparece nos blocos como "Abrir aula".
+ */
+function LessonList({ subject }: { subject: Subject }) {
+  const { links } = useLessonLinks();
+  const lessons = subject.lessons
+    .map((lesson, index) => ({ lesson, index }))
+    .filter(({ lesson }) => !lesson.selfStudy);
+  if (lessons.length === 0) return null;
+  const linked = lessons.filter(({ index }) => links[lessonLinkKey(subject.id, index)]).length;
+
+  return (
+    <details className="group/aulas border-line mt-2 rounded-xl border">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold select-none [&::-webkit-details-marker]:hidden">
+        <Link2 size={14} aria-hidden className="text-accent-text" />
+        <span className="flex-1">Aulas e links</span>
+        <span className="text-muted text-xs font-medium tabular-nums">
+          {linked}/{lessons.length} com link
+        </span>
+        <ChevronDown
+          size={16}
+          aria-hidden
+          className="text-muted transition-transform group-open/aulas:rotate-180"
+        />
+      </summary>
+      <ul className="divide-line border-line divide-y border-t">
+        {lessons.map(({ lesson, index }) => {
+          const position = lessonPosition(subject, index);
+          return (
+            <LessonLinkRow
+              key={index}
+              subjectId={subject.id}
+              lessonIndex={index}
+              title={[lesson.title, lesson.subtitle].filter(Boolean).join(" · ")}
+              part={position.of > 1 ? `aula ${position.n} de ${position.of}` : null}
+            />
+          );
+        })}
+      </ul>
+    </details>
+  );
+}
+
+interface LessonLinkRowProps {
+  subjectId: string;
+  lessonIndex: number;
+  title: string;
+  part: string | null;
+}
+
+function LessonLinkRow({ subjectId, lessonIndex, title, part }: LessonLinkRowProps) {
+  const { links, set } = useLessonLinks();
+  const link = links[lessonLinkKey(subjectId, lessonIndex)] ?? null;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function open() {
+    setDraft(link ?? "");
+    setError(null);
+    setEditing(true);
+  }
+
+  function save(event: FormEvent) {
+    event.preventDefault();
+    if (draft.trim() === "") {
+      if (link) set(subjectId, lessonIndex, null);
+      setEditing(false);
+      return;
+    }
+    const url = normalizeLessonLink(draft);
+    if (!url) {
+      setError("Cole um link que comece com https://.");
+      return;
+    }
+    if (url !== link) set(subjectId, lessonIndex, url);
+    setEditing(false);
+  }
+
+  return (
+    <li className="px-3 py-2.5 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 flex-1">
+          <span className="block leading-snug">{title}</span>
+          {part && <span className="text-muted text-xs">{part}</span>}
+        </span>
+        {link && !editing && (
+          <a
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-accent-text hover:text-ink flex shrink-0 items-center gap-1 text-xs font-semibold"
+          >
+            <PlayCircle size={14} aria-hidden />
+            Abrir
+          </a>
+        )}
+        {!editing && (
+          <button
+            type="button"
+            onClick={open}
+            aria-label={`${link ? "Trocar" : "Adicionar"} link: ${title}`}
+            className="text-muted hover:text-ink flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-semibold"
+          >
+            {link ? <Pencil size={13} aria-hidden /> : <Link2 size={13} aria-hidden />}
+            {!link && "Link"}
+          </button>
+        )}
+      </div>
+      {editing && (
+        <form onSubmit={save} noValidate className="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            type="url"
+            inputMode="url"
+            autoFocus
+            maxLength={MAX_LINK_LENGTH}
+            placeholder="https://drive.google.com/…"
+            aria-label={`Link da aula: ${title}`}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            className="bg-frame border-line focus:border-accent-text min-w-0 flex-1 basis-56 rounded-lg border px-2 py-1.5 text-sm outline-none"
+          />
+          <button
+            type="submit"
+            className="bg-accent text-on-accent hover:bg-accent-hover rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors"
+          >
+            {draft.trim() === "" && link ? "Remover" : "Salvar"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="text-muted hover:text-ink rounded-lg px-2 py-1.5 text-xs font-semibold"
+          >
+            Cancelar
+          </button>
+          {error && (
+            <p role="alert" className="text-danger w-full text-xs font-medium">
+              {error}
+            </p>
+          )}
+        </form>
+      )}
+    </li>
   );
 }

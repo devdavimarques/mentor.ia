@@ -79,7 +79,9 @@ export function parseWeights(value: unknown): Record<string, number> {
 }
 
 export function parseSettings(value: unknown): Settings {
-  if (!isRecord(value)) return { ...DEFAULT_SETTINGS, weights: { ...DEFAULT_SETTINGS.weights } };
+  if (!isRecord(value)) {
+    return { ...DEFAULT_SETTINGS, weights: { ...DEFAULT_SETTINGS.weights }, mockTargets: {} };
+  }
 
   const activeDays = Array.isArray(value.activeDays)
     ? [
@@ -108,7 +110,20 @@ export function parseSettings(value: unknown): Settings {
       ? (value.mockEveryWeeks as number)
       : DEFAULT_SETTINGS.mockEveryWeeks,
     mockDay: isIsoDay(value.mockDay) ? value.mockDay : DEFAULT_SETTINGS.mockDay,
+    mockTargets: parseMockTargets(value.mockTargets),
   };
+}
+
+/** Metas de acerto nos simulados: só matérias objetivas, inteiros de 1 a 100. */
+export function parseMockTargets(value: unknown): Record<string, number> {
+  if (!isRecord(value)) return {};
+  const targets: Record<string, number> = {};
+  for (const [id, pct] of Object.entries(value)) {
+    const subject = findSubject(id);
+    if (!subject || subject.group === "redacao") continue;
+    if (Number.isInteger(pct) && (pct as number) >= 1 && (pct as number) <= 100) targets[id] = pct as number;
+  }
+  return targets;
 }
 
 /**

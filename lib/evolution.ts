@@ -1,5 +1,5 @@
 import { addDays, formatShortDate, fromIsoDate, toIsoDate, weekStartOf } from "./date";
-import { mockTotal } from "./mock-exams";
+import { formatPoints, mockLabel, mockSubjectScore, mockTotal, type MockScore } from "./mock-exams";
 import { overallProgress, studiedLessons, studiedTopics, subjectProgress } from "./progress";
 import { getSubject, SUBJECTS } from "./subjects";
 import type { MockExam, QuestionLog, StudyLog } from "./types";
@@ -21,24 +21,22 @@ const MAX_WEEKS = 26;
 
 const short = (iso: string) => formatShortDate(fromIsoDate(iso));
 
-/** Acerto em cada simulado, no total ou numa matéria (só os simulados que a tiveram). */
+const mockDetail = (exam: MockExam, score: MockScore) =>
+  `${mockLabel(exam)}: ${formatPoints(score.points)} de ${formatPoints(score.maxPoints)} pontos · ${score.correct}/${score.answered}`;
+
+/**
+ * Nota em cada simulado (em % da nota máxima, para simulados de tamanhos
+ * diferentes caberem no mesmo eixo), no total ou numa matéria — só os
+ * simulados que a tiveram. Os pontos vão no detalhe.
+ */
 export function mockSeries(exams: readonly MockExam[], subjectId: string | null): EvolutionPoint[] {
   return [...exams]
     .sort((a, b) => (a.takenOn < b.takenOn ? -1 : a.takenOn > b.takenOn ? 1 : 0))
     .flatMap((exam) => {
-      if (subjectId === null) {
-        const total = mockTotal(exam);
-        return [{ label: short(exam.takenOn), value: total.pct, detail: `${total.correct} de ${total.answered} questões` }];
-      }
-      const result = exam.results[subjectId];
-      if (!result) return [];
-      return [
-        {
-          label: short(exam.takenOn),
-          value: Math.round((result.correct / result.answered) * 100),
-          detail: `${result.correct} de ${result.answered} questões`,
-        },
-      ];
+      const result = subjectId === null ? null : exam.results[subjectId];
+      if (subjectId !== null && !result) return [];
+      const score = result ? mockSubjectScore(exam, result) : mockTotal(exam);
+      return [{ label: short(exam.takenOn), value: score.pct, detail: mockDetail(exam, score) }];
     });
 }
 

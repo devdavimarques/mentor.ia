@@ -1,12 +1,15 @@
 "use client";
 
-import { Check, ListPlus, Lock } from "lucide-react";
+import { Check, ListPlus, Lock, PlayCircle } from "lucide-react";
 import { useState } from "react";
 
+import { useLessonLinks } from "@/components/lesson-links-context";
 import { useNextLessons } from "@/components/lesson-order-context";
 import { QuestionPanel } from "@/components/question-panel";
 import { useQuestions } from "@/components/questions-context";
+import { TimerButton } from "@/components/study-timer";
 import { HotTag, Tag } from "@/components/ui/tag";
+import { lessonLinkKey } from "@/lib/lesson-links";
 import { topicQuestionStats } from "@/lib/questions";
 import { sequenceIndex } from "@/lib/schedule";
 import { findSubject, lessonPosition, topicCode } from "@/lib/subjects";
@@ -222,6 +225,7 @@ interface LessonBlockProps {
 /** Cartão de um bloco do ciclo: uma aula do curso, com o item do edital que ela cobre. */
 export function LessonBlock({ block, checked, onToggle, tags }: LessonBlockProps) {
   const nextLessons = useNextLessons();
+  const { links } = useLessonLinks();
   const subject = findSubject(block.subjectId);
   const lesson = subject?.lessons[block.lessonIndex];
   if (!subject || !lesson) return null;
@@ -231,6 +235,7 @@ export function LessonBlock({ block, checked, onToggle, tags }: LessonBlockProps
     next !== undefined && sequenceIndex(subject, block) > next ? `faça antes: ${lessonLabel(subject, next)}` : null;
 
   const position = lessonPosition(subject, block.lessonIndex);
+  const link = links[lessonLinkKey(subject.id, block.lessonIndex)];
   const topicNames = lesson.topics.map((t) => subject.topics[t]).join(" · ");
   const title = lesson.selfStudy
     ? lesson.title
@@ -261,6 +266,18 @@ export function LessonBlock({ block, checked, onToggle, tags }: LessonBlockProps
           {!lesson.selfStudy && !lesson.recorded && <Tag>não gravada</Tag>}
           {block.lap > 1 && <Tag>{block.lap}ª volta</Tag>}
           {lesson.topics.some((t) => subject.hotTopics.includes(t)) && <HotTag />}
+          {link && (
+            <a
+              href={link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent-text hover:text-ink flex items-center gap-1 font-semibold"
+            >
+              <PlayCircle size={13} aria-hidden />
+              Abrir aula
+            </a>
+          )}
+          {!checked && <TimerButton subjectId={subject.id} lessonIndex={block.lessonIndex} />}
         </>
       }
     />

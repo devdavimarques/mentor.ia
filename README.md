@@ -29,7 +29,7 @@ npm install
 2. Abra **SQL Editor** e execute, nesta ordem, cada arquivo de
    [`supabase/migrations/`](supabase/migrations/): `0001_init.sql`,
    `0002_study_logs_reviews_questions.sql`, `0003_lessons.sql`, `0004_profile_passwords.sql`,
-   `0005_mock_exams.sql` e `0006_flashcards.sql`
+   `0005_mock_exams.sql`, `0006_flashcards.sql` e `0007_study_time_links_scores.sql`
 3. Vá em **Settings → API** e copie `Project URL` e a chave `service_role`
 
 ### 3. Configurar as variáveis de ambiente
@@ -113,8 +113,13 @@ review_logs     profile_id, subject_id,        Revisões feitas (1ª, 2ª, 3ª).
 question_logs   profile_id, subject_id,        Lançamentos de questões: feitas / certas.
                 topic_index, answered,
                 correct, logged_on
-mock_exams      profile_id, taken_on,          Simulados: results (jsonb) é
-                results                        subjectId → feitas / certas.
+mock_exams      profile_id, title, taken_on,   Simulados: results (jsonb) é
+                points_per_question, results   subjectId → feitas / certas.
+study_sessions  profile_id, subject_id,        Tempo de estudo (cronômetro).
+                lesson_index, minutes,
+                studied_on
+lesson_links    subject_id, lesson_index, url  Link de cada aula. Do curso, não de
+                                               um perfil: todos veem os mesmos.
 flashcards      profile_id, subject_id,        Flashcards e o agendamento da
                 topic_index, front, back,      repetição espaçada.
                 due_on, interval_days, ease,
@@ -151,16 +156,29 @@ flashcards      profile_id, subject_id,        Flashcards e o agendamento da
   aulas nos outros dias), e a aba Hoje lembra de fazer a prova inteira e lançar o acerto por
   matéria (a redação fica de fora). Quem quiser estudar no dia usa **Adiantar um bloco**
   (`advanceBlock`): o próximo bloco da fila vem para hoje, o resto recua uma posição e o fim do
-  ciclo chega mais cedo. A aba Progresso mostra o histórico e a variação de cada matéria em
-  relação ao simulado anterior; dá para lançar avulso por lá também.
+  ciclo chega mais cedo.
+- **Aba Simulados** ([`lib/mock-exams.ts`](lib/mock-exams.ts)): cada lançamento tem nome, data
+  (pode ser de dias atrás) e o valor de cada questão, igual para todas — a nota sai em pontos
+  (45 certas × 1,25 = 56,25 de 100). A aba mostra o gráfico das notas (em % da nota máxima,
+  total ou por matéria), as **metas de acerto por matéria** (gravadas em `settings.mockTargets`,
+  com "na meta" ou quantos pontos percentuais faltam no último simulado) e o histórico com a
+  nota de cada matéria.
+- **Cronômetro** ([`lib/study-time.ts`](lib/study-time.ts)): "Cronometrar" num bloco (ou em
+  Progresso, para estudo livre) liga uma barra fixa com pausa e parada. O cronômetro ligado fica
+  no navegador (sobrevive a recarregar a página); ao parar, dá para corrigir os minutos antes de
+  gravar. A aba Progresso mostra o tempo por matéria na semana e no total, ao lado da fatia que o
+  peso da matéria pede, e aceita lançamento à mão.
+- **Links das aulas:** na aba Matérias, cada matéria tem "Aulas e links", onde se cola o link de
+  cada aula (só `https://`). O link vale para todos os perfis e aparece nos blocos como "Abrir
+  aula".
 - **Marcar e desmarcar:** só o quadrado do check marca um bloco, uma revisão ou um tópico na
   aba Matérias; desmarcar pede confirmação, para evitar toques sem querer.
 - **Sequência** ([`lib/streak.ts`](lib/streak.ts)): dias de estudo seguidos com a meta cumprida
   (pelo menos `blocksPerDay` aulas do ciclo marcadas no dia), e o recorde. Folga e dia de
   simulado não contam nem quebram; hoje só entra quando a meta é batida.
-- **Evolução** (aba Progresso, [`lib/evolution.ts`](lib/evolution.ts)): gráficos do acerto em cada
-  simulado (total ou por matéria) e, semana a semana, do edital estudado ou do acerto nas
-  questões (no total ou por matéria). Cada gráfico tem tooltip e uma tabela com os mesmos números.
+- **Evolução** ([`lib/evolution.ts`](lib/evolution.ts)): na aba Simulados, a nota em cada
+  simulado (total ou por matéria); na aba Progresso, semana a semana, o edital estudado ou o
+  acerto nas questões (no total ou por matéria). Cada gráfico tem tooltip e uma tabela com os mesmos números.
 - **Flashcards** (aba Flashcards, [`lib/flashcards.ts`](lib/flashcards.ts)): cartões de frente e
   verso por matéria (e tópico, opcional), revisados com repetição espaçada no estilo do Anki.
   Cada resposta (Errei, Difícil, Bom, Fácil) decide quando o cartão volta; "Errei" o traz de novo
@@ -219,7 +237,9 @@ lib/
   progress.ts         Tópicos vistos, blocos marcados e percentuais
   reviews.ts          Revisões espaçadas (1, 7 e 30 dias)
   questions.ts        Estatísticas, validação das questões e tópicos de pior acerto
-  mock-exams.ts       Simulados: quando cai, validação e evolução por matéria
+  mock-exams.ts       Simulados: quando cai, validação, pontos e evolução por matéria
+  study-time.ts       Cronômetro: validação e tempo por matéria
+  lesson-links.ts     Links das aulas: chave e validação
   flashcards.ts       Flashcards: repetição espaçada e validação
   streak.ts           Sequência de dias com a meta cumprida
   evolution.ts        Séries dos gráficos de evolução

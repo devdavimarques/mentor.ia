@@ -4,10 +4,13 @@ import { Eye, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
+import { LessonLinksProvider } from "@/components/lesson-links-context";
 import { LessonOrderProvider } from "@/components/lesson-order-context";
 import { QuestionsProvider } from "@/components/questions-context";
+import { StudyTimerProvider, TimerBar, useStudyTimerState } from "@/components/study-timer";
 import { TabBar, TabNav } from "@/components/tab-nav";
 import { FlashcardsTab } from "@/components/tabs/flashcards-tab";
+import { MockExamsTab } from "@/components/tabs/mock-exams-tab";
 import { OverdueTab } from "@/components/tabs/overdue-tab";
 import { ProgressTab } from "@/components/tabs/progress-tab";
 import { SettingsTab } from "@/components/tabs/settings-tab";
@@ -19,6 +22,7 @@ import { dueFlashcards } from "@/lib/flashcards";
 import { mockTakenInWeek } from "@/lib/mock-exams";
 import { blockKey } from "@/lib/progress";
 import { mockDayOfWeek } from "@/lib/schedule";
+import { minutesOn } from "@/lib/study-time";
 import type { Profile, StudyState, TabId } from "@/lib/types";
 
 interface StudyCycleProps {
@@ -75,6 +79,10 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     isMockDay,
     addMockExam,
     deleteMockExam,
+    setMockTarget,
+    addStudySession,
+    deleteStudySession,
+    setLessonLink,
     addFlashcard,
     updateFlashcard,
     reviewFlashcard,
@@ -86,16 +94,28 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     [state.questionLogs, addQuestions, deleteQuestions],
   );
 
+  const linksApi = useMemo(
+    () => ({ links: state.lessonLinks, set: setLessonLink }),
+    [state.lessonLinks, setLessonLink],
+  );
+
+  // O cronômetro ligado fica guardado no navegador, separado por perfil.
+  const timer = useStudyTimerState(`mentor.ia:cronometro:${guest ? "visitante" : profile.id}`);
+  const timerApi = useMemo(() => ({ active: timer.active, start: timer.start }), [timer.active, timer.start]);
+
   const flashcardsDue = dueFlashcards(state.flashcards, todayDate).length;
-  // Contadores das abas: atrasadas ainda sem fazer e cartões para revisar hoje.
+  // Contadores das abas: atrasadas ainda sem fazer, simulado pendente e cartões para revisar hoje.
   const badges = {
     atrasadas: overdue.filter((o) => !checked.has(blockKey(o.weekStart, o.block))).length,
+    simulados: pendingMock ? 1 : 0,
     flashcards: flashcardsDue,
   };
 
   return (
     <QuestionsProvider value={questionsApi}>
       <LessonOrderProvider value={nextLessons}>
+      <LessonLinksProvider value={linksApi}>
+      <StudyTimerProvider value={timerApi}>
       <div className="bg-frame border-line mx-auto min-h-dvh w-full max-w-6xl sm:my-6 sm:min-h-0 sm:rounded-3xl sm:border sm:shadow-2xl sm:shadow-black/20">
         <AppHeader
           guest={guest}
@@ -137,7 +157,8 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
           aria-labelledby={`tab-${tab}`}
           tabIndex={-1}
           // Espaço para a barra de abas do rodapé, que só existe abaixo de `lg`.
-          className="p-4 pb-28 sm:p-6 sm:pb-28 lg:pb-6"
+          // Com o cronômetro ligado, a barra dele também ocupa o pé da tela.
+          className={`p-4 sm:p-6 ${timer.active ? "pb-48 sm:pb-48 lg:pb-28" : "pb-28 sm:pb-28 lg:pb-6"}`}
         >
           {tab === "hoje" && (
             <TodayTab
@@ -156,10 +177,24 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
               isMockDay={isMockDay}
               onToggleBlock={toggleBlock}
               onToggleReview={toggleReview}
+              mockExams={state.mockExams}
               onAddMockExam={addMockExam}
               onAdvanceBlock={advanceOneBlock}
+              minutesToday={minutesOn(state.studySessions, todayDate)}
               flashcardsDue={flashcardsDue}
               onOpenFlashcards={() => setTab("flashcards")}
+            />
+          )}
+
+          {tab === "simulados" && (
+            <MockExamsTab
+              exams={state.mockExams}
+              targets={state.settings.mockTargets}
+              todayDate={todayDate}
+              pendingMock={pendingMock}
+              onAdd={addMockExam}
+              onDelete={deleteMockExam}
+              onSetTarget={setMockTarget}
             />
           )}
 
@@ -212,11 +247,12 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
               pointers={state.pointers}
               cycleEnd={cycleEnd}
               topicAccuracy={topicAccuracy}
-              mockExams={state.mockExams}
               studyLogs={state.studyLogs}
+              studySessions={state.studySessions}
+              settings={state.settings}
               todayDate={todayDate}
-              onAddMockExam={addMockExam}
-              onDeleteMockExam={deleteMockExam}
+              onAddStudySession={addStudySession}
+              onDeleteStudySession={deleteStudySession}
             />
           )}
 
@@ -236,7 +272,10 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
         </div>
       </div>
 
+      <TimerBar active={timer.active} update={timer.update} onSave={addStudySession} />
       <TabBar active={tab} onChange={setTab} badges={badges} />
+      </StudyTimerProvider>
+      </LessonLinksProvider>
       </LessonOrderProvider>
     </QuestionsProvider>
   );

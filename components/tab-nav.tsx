@@ -4,6 +4,7 @@ import {
   AlarmClock,
   BookOpen,
   CalendarDays,
+  ClipboardList,
   Layers,
   ListChecks,
   Settings2,
@@ -13,12 +14,13 @@ import {
 
 import type { TabId } from "@/lib/types";
 
-/** `short` é o nome no celular e em telas médias, onde as sete abas não cabem por extenso. */
+/** `short` é o nome no celular e em telas médias, onde as oito abas não cabem por extenso. */
 export const TABS: ReadonlyArray<{ id: TabId; label: string; short: string; icon: LucideIcon }> = [
   { id: "hoje", label: "Hoje", short: "Hoje", icon: CalendarDays },
   { id: "semana", label: "Semana", short: "Semana", icon: ListChecks },
   { id: "atrasadas", label: "Atrasadas", short: "Atrasos", icon: AlarmClock },
   { id: "materias", label: "Matérias", short: "Matérias", icon: BookOpen },
+  { id: "simulados", label: "Simulados", short: "Simulados", icon: ClipboardList },
   { id: "flashcards", label: "Flashcards", short: "Cards", icon: Layers },
   { id: "progresso", label: "Progresso", short: "Progresso", icon: TrendingUp },
   { id: "config", label: "Configurar", short: "Config", icon: Settings2 },
@@ -62,7 +64,7 @@ export function TabNav({ active, onChange, badges = {} }: TabNavProps) {
             aria-controls={`panel-${id}`}
             aria-label={count > 0 ? `${label} (${count})` : label}
             onClick={() => onChange(id)}
-            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors xl:px-3 ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-[0.8rem] font-semibold transition-colors xl:px-3 xl:text-sm ${
               isActive ? "bg-accent text-on-accent" : "text-muted hover:text-ink"
             }`}
           >
@@ -89,7 +91,7 @@ export function TabBar({ active, onChange, badges = {} }: TabNavProps) {
       aria-label="Seções do ciclo"
       className="bg-frame/95 border-line fixed inset-x-0 bottom-0 z-20 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
     >
-      <div className="mx-auto grid max-w-lg grid-cols-7">
+      <div className="mx-auto grid max-w-lg grid-cols-8">
         {TABS.map(({ id, label, short, icon: Icon }) => {
           const isActive = active === id;
           const count = badges[id] ?? 0;

@@ -17,13 +17,15 @@ import { LessonBlock, TopicBlock } from "@/components/topic-block";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatPanel } from "@/components/ui/stat-panel";
 import { Tag } from "@/components/ui/tag";
+import type { MockExamDetails } from "@/hooks/use-study-cycle";
 import type { CycleEnd, ExamOutlook } from "@/lib/cycle";
 import type { Streak } from "@/lib/streak";
 import { formatLongDate, formatShortDate, fromIsoDate } from "@/lib/date";
 import { blockKey, overallProgress, type StudiedMap } from "@/lib/progress";
 import { daysBetween, type ReviewItem } from "@/lib/reviews";
+import { formatMinutes } from "@/lib/study-time";
 import { DAY_LABELS_FULL, SUBJECTS } from "@/lib/subjects";
-import type { MockResult, ScheduledBlock, WeekSchedule } from "@/lib/types";
+import type { MockExam, MockResult, ScheduledBlock, WeekSchedule } from "@/lib/types";
 
 interface TodayTabProps {
   today: Date;
@@ -43,8 +45,11 @@ interface TodayTabProps {
   isMockDay: boolean;
   onToggleBlock: (block: ScheduledBlock) => void;
   onToggleReview: (item: ReviewItem) => void;
-  onAddMockExam: (results: Record<string, MockResult>) => void;
+  mockExams: readonly MockExam[];
+  onAddMockExam: (results: Record<string, MockResult>, details: MockExamDetails) => void;
   onAdvanceBlock: () => void;
+  /** Minutos cronometrados hoje. */
+  minutesToday: number;
   /** Flashcards para revisar hoje. */
   flashcardsDue: number;
   onOpenFlashcards: () => void;
@@ -66,8 +71,10 @@ export function TodayTab({
   isMockDay,
   onToggleBlock,
   onToggleReview,
+  mockExams,
   onAddMockExam,
   onAdvanceBlock,
+  minutesToday,
   flashcardsDue,
   onOpenFlashcards,
 }: TodayTabProps) {
@@ -81,7 +88,12 @@ export function TodayTab({
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <div className="flex flex-col gap-8">
         {pendingMock && (
-          <MockReminder dueOn={pendingMock} todayDate={todayDate} onSubmit={onAddMockExam} />
+          <MockReminder
+            dueOn={pendingMock}
+            todayDate={todayDate}
+            exams={mockExams}
+            onSubmit={onAddMockExam}
+          />
         )}
 
         <section>
@@ -187,6 +199,7 @@ export function TodayTab({
           <ProgressBar value={dayPct} label="Blocos de hoje estudados" />
           <p className="text-muted mt-2 text-xs tabular-nums">
             {blocks.length > 0 ? `${dayDone} de ${blocks.length} blocos` : "Dia livre"}
+            {minutesToday > 0 && ` · ${formatMinutes(minutesToday)} estudados`}
           </p>
         </StatPanel>
 
@@ -306,11 +319,12 @@ function ExamOutlookText({ outlook }: { outlook: ExamOutlook | null }) {
 interface MockReminderProps {
   dueOn: string;
   todayDate: string;
-  onSubmit: (results: Record<string, MockResult>) => void;
+  exams: readonly MockExam[];
+  onSubmit: (results: Record<string, MockResult>, details: MockExamDetails) => void;
 }
 
 /** Lembrete do simulado da semana; abre o lançamento do resultado. */
-function MockReminder({ dueOn, todayDate, onSubmit }: MockReminderProps) {
+function MockReminder({ dueOn, todayDate, exams, onSubmit }: MockReminderProps) {
   const [open, setOpen] = useState(false);
   const when = dueOn === todayDate ? "hoje" : `desde ${formatShortDate(fromIsoDate(dueOn))}`;
 
@@ -343,7 +357,12 @@ function MockReminder({ dueOn, todayDate, onSubmit }: MockReminderProps) {
       </div>
       {open && (
         <div className="border-line mt-4 border-t pt-4">
-          <MockExamForm onSubmit={onSubmit} onCancel={() => setOpen(false)} />
+          <MockExamForm
+            todayDate={todayDate}
+            previous={exams}
+            onSubmit={onSubmit}
+            onCancel={() => setOpen(false)}
+          />
         </div>
       )}
     </section>

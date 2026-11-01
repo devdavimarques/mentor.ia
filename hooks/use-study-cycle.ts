@@ -6,17 +6,21 @@ import {
   addFlashcardAction,
   addMockExamAction,
   addQuestionsAction,
+  addStudySessionAction,
   advanceBlockAction,
   deleteFlashcardAction,
   deleteMockExamAction,
   deleteQuestionsAction,
+  deleteStudySessionAction,
   markReviewAction,
   reviewFlashcardAction,
+  setLessonLinkAction,
   setTopicStudiedAction,
   toggleBlockAction,
   unmarkReviewAction,
   updateExamDateAction,
   updateFlashcardAction,
+  updateMockTargetsAction,
   updateSettingsAction,
   type ActionResult,
 } from "@/app/actions";
@@ -28,6 +32,7 @@ import {
 } from "@/lib/cycle";
 import { fromIsoDate, isoWeekday } from "@/lib/date";
 import { reviewFlashcard as scheduleReview, type FlashcardGrade } from "@/lib/flashcards";
+import { lessonLinkKey } from "@/lib/lesson-links";
 import { pendingMock as calcPendingMock } from "@/lib/mock-exams";
 import {
   checkedBlocks,
@@ -66,8 +71,16 @@ import type {
   ScheduledBlock,
   Settings,
   StudyLog,
+  StudySession,
   StudyState,
 } from "@/lib/types";
+
+/** Cabeçalho de um simulado lançado. */
+export interface MockExamDetails {
+  title: string | null;
+  takenOn: string;
+  pointsPerQuestion: number;
+}
 
 export interface StudyCycle {
   state: StudyState;
@@ -126,8 +139,15 @@ export interface StudyCycle {
   advanceOneBlock: () => void;
   /** Hoje é o dia do simulado desta semana (sem blocos do ciclo). */
   isMockDay: boolean;
-  addMockExam: (results: Record<string, MockResult>) => void;
+  addMockExam: (results: Record<string, MockResult>, details: MockExamDetails) => void;
   deleteMockExam: (id: string) => void;
+  /** Meta de acerto (%) de uma matéria nos simulados; `null` tira a meta. */
+  setMockTarget: (subjectId: string, pct: number | null) => void;
+  /** Grava minutos de estudo de hoje (cronômetro ou lançamento à mão). */
+  addStudySession: (subjectId: string, lessonIndex: number | null, minutes: number) => void;
+  deleteStudySession: (id: string) => void;
+  /** Link de uma aula; vazio apaga. Vale para todos os perfis. */
+  setLessonLink: (subjectId: string, lessonIndex: number, url: string | null) => void;
   addFlashcard: (subjectId: string, topicIndex: number | null, front: string, back: string) => void;
   updateFlashcard: (id: string, subjectId: string, topicIndex: number | null, front: string, back: string) => void;
   /** Resposta de uma revisão: o cartão é reagendado na hora e o servidor confirma. */
@@ -460,21 +480,91 @@ export function useStudyCycle(
   );
 
   const addMockExam = useCallback(
-    (results: Record<string, MockResult>) => {
+    (results: Record<string, MockResult>, details: MockExamDetails) => {
       // Mesmo esquema das questões: id provisório até o banco devolver o definitivo.
       const optimistic: MockExam = {
         id: `${persist ? PENDING_ID_PREFIX : "local-"}${++pendingIds.current}`,
-        takenOn: todayDate,
+        ...details,
         results,
       };
       mutate(
         (s) => ({ ...s, mockExams: [...s.mockExams, optimistic] }),
         (s) => ({ ...s, mockExams: s.mockExams.filter((e) => e !== optimistic) }),
-        () => addMockExamAction(results),
+        () => addMockExamAction(results, details),
         (s, saved) => ({ ...s, mockExams: s.mockExams.map((e) => (e === optimistic ? saved : e)) }),
       );
     },
+    [mutate, persist],
+  );
+
+  // Como a data da prova: só a meta vai para o servidor, o cronograma não muda.
+  const setMockTarget = useCallback(
+    (subjectId: string, pct: number | null) => {
+      const previous = stateRef.current.settings.mockTargets;
+      const next = { ...previous };
+      if (pct === null) delete next[subjectId];
+      else next[subjectId] = pct;
+      mutate(
+        (s) => ({ ...s, settings: { ...s.settings, mockTargets: next } }),
+        (s) => ({ ...s, settings: { ...s.settings, mockTargets: previous } }),
+        () => updateMockTargetsAction(next),
+      );
+    },
+    [mutate],
+  );
+
+  const addStudySession = useCallback(
+    (subjectId: string, lessonIndex: number | null, minutes: number) => {
+      const optimistic: StudySession = {
+        id: `${persist ? PENDING_ID_PREFIX : "local-"}${++pendingIds.current}`,
+        subjectId,
+        lessonIndex,
+        minutes,
+        studiedOn: todayDate,
+      };
+      mutate(
+        (s) => ({ ...s, studySessions: [...s.studySessions, optimistic] }),
+        (s) => ({ ...s, studySessions: s.studySessions.filter((x) => x !== optimistic) }),
+        () => addStudySessionAction(subjectId, lessonIndex, minutes),
+        (s, saved) => ({ ...s, studySessions: s.studySessions.map((x) => (x === optimistic ? saved : x)) }),
+      );
+    },
     [mutate, todayDate, persist],
+  );
+
+  const deleteStudySession = useCallback(
+    (id: string) => {
+      if (id.startsWith(PENDING_ID_PREFIX)) return;
+      const existing = stateRef.current.studySessions.find((x) => x.id === id);
+      if (!existing) return;
+      mutate(
+        (s) => ({ ...s, studySessions: s.studySessions.filter((x) => x.id !== id) }),
+        (s) => ({ ...s, studySessions: [...s.studySessions, existing] }),
+        () => deleteStudySessionAction(id),
+      );
+    },
+    [mutate],
+  );
+
+  const setLessonLink = useCallback(
+    (subjectId: string, lessonIndex: number, url: string | null) => {
+      const key = lessonLinkKey(subjectId, lessonIndex);
+      const previous = stateRef.current.lessonLinks[key];
+      const withLink = (s: StudyState, value: string | null | undefined): StudyState => {
+        const lessonLinks = { ...s.lessonLinks };
+        if (value) lessonLinks[key] = value;
+        else delete lessonLinks[key];
+        return { ...s, lessonLinks };
+      };
+      mutate(
+        (s) => withLink(s, url),
+        (s) => withLink(s, previous),
+        () => setLessonLinkAction(subjectId, lessonIndex, url ?? ""),
+        // O servidor devolve o link normalizado.
+        (s, saved) => withLink(s, saved),
+      );
+    },
+    [mutate],
   );
 
   const deleteMockExam = useCallback(
@@ -682,6 +772,10 @@ export function useStudyCycle(
     isMockDay,
     addMockExam,
     deleteMockExam,
+    setMockTarget,
+    addStudySession,
+    deleteStudySession,
+    setLessonLink,
     addFlashcard,
     updateFlashcard,
     reviewFlashcard,

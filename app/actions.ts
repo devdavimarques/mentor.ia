@@ -15,11 +15,14 @@ import {
   unmarkReview,
 } from "@/lib/db/logs";
 import { deleteFlashcard, findFlashcard, insertFlashcard, saveFlashcard } from "@/lib/db/flashcards";
+import { saveLessonLink } from "@/lib/db/lesson-links";
 import { deleteMockExam, insertMockExam } from "@/lib/db/mock-exams";
+import { deleteStudySession, insertStudySession } from "@/lib/db/study-sessions";
 import { findProfileCredentials } from "@/lib/db/profiles";
 import { loadStudyState, saveSchedule } from "@/lib/db/study-state";
 import { flashcardError, isFlashcardGrade, reviewFlashcard } from "@/lib/flashcards";
-import { mockResultsError, parseMockResults } from "@/lib/mock-exams";
+import { normalizeLessonLink } from "@/lib/lesson-links";
+import { mockDetailsError, mockResultsError, parseMockResults } from "@/lib/mock-exams";
 import { checkedBlocks } from "@/lib/progress";
 import { questionLogError } from "@/lib/questions";
 import { isReviewStage } from "@/lib/reviews";
@@ -30,8 +33,10 @@ import {
   isKnownTopic,
   isRecord,
   isUuid,
+  parseMockTargets,
   parseSettings,
 } from "@/lib/state-schema";
+import { studySessionError } from "@/lib/study-time";
 import { verifyPassword } from "@/lib/password";
 import { clearSession, isProfileId, writeGuestSession, writeProfileSession } from "@/lib/session";
 import { currentProfile } from "@/lib/study-session";
@@ -43,6 +48,7 @@ import type {
   ReviewStage,
   ScheduleSnapshot,
   StudyLog,
+  StudySession,
 } from "@/lib/types";
 
 export type ActionResult<T = null> =
@@ -300,11 +306,19 @@ export async function advanceBlockAction(): Promise<ActionResult<ScheduleSnapsho
   }
 }
 
-/** Lança um simulado feito hoje. */
-export async function addMockExamAction(rawResults: unknown): Promise<ActionResult<MockExam>> {
+/** Lança um simulado: nome, data (pode ser de dias atrás), valor da questão e acertos por matéria. */
+export async function addMockExamAction(
+  rawResults: unknown,
+  details: unknown,
+): Promise<ActionResult<MockExam>> {
   try {
     const profile = await currentProfile();
     if (!profile) return { ok: false, error: SESSION_EXPIRED };
+
+    if (!isRecord(details)) return { ok: false, error: "Simulado inválido." };
+    const title = typeof details.title === "string" && details.title.trim() !== "" ? details.title.trim() : null;
+    const invalidDetails = mockDetailsError(title, details.takenOn, details.pointsPerQuestion, todayIsoDate());
+    if (invalidDetails) return { ok: false, error: invalidDetails };
 
     const results = parseMockResults(rawResults);
     // O parse descarta o que não serve; num lançamento, isso é erro, não silêncio.
@@ -314,9 +328,98 @@ export async function addMockExamAction(rawResults: unknown): Promise<ActionResu
     const invalid = mockResultsError(results);
     if (invalid) return { ok: false, error: invalid };
 
-    return { ok: true, data: await insertMockExam(profile.id, todayIsoDate(), results) };
+    const exam = await insertMockExam(profile.id, {
+      title,
+      takenOn: details.takenOn as string,
+      pointsPerQuestion: details.pointsPerQuestion as number,
+      results,
+    });
+    return { ok: true, data: exam };
   } catch (error) {
     return fail("addMockExam", error);
+  }
+}
+
+/**
+ * Metas de acerto por matéria nos simulados. Como a data da prova, não mexe
+ * no cronograma: só é gravada.
+ */
+export async function updateMockTargetsAction(
+  rawTargets: unknown,
+): Promise<ActionResult<Record<string, number>>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    const mockTargets = parseMockTargets(rawTargets);
+
+    const state = await loadStudyState(profile.id);
+    const { snapshot } = syncCycle(state, todayIsoDate());
+    await saveSchedule(profile.id, { ...snapshot, settings: { ...snapshot.settings, mockTargets } });
+    return { ok: true, data: mockTargets };
+  } catch (error) {
+    return fail("updateMockTargets", error);
+  }
+}
+
+/** Grava um período de estudo (parada do cronômetro ou lançamento à mão) com a data de hoje. */
+export async function addStudySessionAction(
+  subjectId: string,
+  lessonIndex: number | null,
+  minutes: number,
+): Promise<ActionResult<StudySession>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    const invalid = studySessionError(subjectId, lessonIndex, minutes);
+    if (invalid) return { ok: false, error: invalid };
+
+    const session = await insertStudySession(profile.id, {
+      subjectId,
+      lessonIndex,
+      minutes,
+      studiedOn: todayIsoDate(),
+    });
+    return { ok: true, data: session };
+  } catch (error) {
+    return fail("addStudySession", error);
+  }
+}
+
+export async function deleteStudySessionAction(id: string): Promise<ActionResult> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    if (!isUuid(id)) return { ok: false, error: "Registro inválido." };
+
+    await deleteStudySession(profile.id, id);
+    return { ok: true, data: null };
+  } catch (error) {
+    return fail("deleteStudySession", error);
+  }
+}
+
+/**
+ * Link de uma aula (vazio apaga). É do curso, não do perfil: qualquer perfil
+ * logado edita, e todos veem o mesmo.
+ */
+export async function setLessonLinkAction(
+  subjectId: string,
+  lessonIndex: number,
+  rawUrl: unknown,
+): Promise<ActionResult<string | null>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    if (!isKnownLesson(subjectId, lessonIndex)) return { ok: false, error: "Aula inexistente no curso." };
+
+    const empty = typeof rawUrl === "string" && rawUrl.trim() === "";
+    const url = empty ? null : normalizeLessonLink(rawUrl);
+    if (!empty && !url) return { ok: false, error: "Cole um link que comece com https://." };
+
+    await saveLessonLink(subjectId, lessonIndex, url);
+    return { ok: true, data: url };
+  } catch (error) {
+    return fail("setLessonLink", error);
   }
 }
 
