@@ -14,9 +14,11 @@ import {
   unmarkBlock,
   unmarkReview,
 } from "@/lib/db/logs";
+import { deleteFlashcard, findFlashcard, insertFlashcard, saveFlashcard } from "@/lib/db/flashcards";
 import { deleteMockExam, insertMockExam } from "@/lib/db/mock-exams";
 import { findProfileCredentials } from "@/lib/db/profiles";
 import { loadStudyState, saveSchedule } from "@/lib/db/study-state";
+import { flashcardError, isFlashcardGrade, reviewFlashcard } from "@/lib/flashcards";
 import { mockResultsError, parseMockResults } from "@/lib/mock-exams";
 import { checkedBlocks } from "@/lib/progress";
 import { questionLogError } from "@/lib/questions";
@@ -35,6 +37,7 @@ import { clearSession, isProfileId, writeGuestSession, writeProfileSession } fro
 import { currentProfile } from "@/lib/study-session";
 import type {
   BlockRef,
+  Flashcard,
   MockExam,
   QuestionLog,
   ReviewStage,
@@ -356,5 +359,92 @@ export async function updateSettingsAction(
     return { ok: true, data: snapshot };
   } catch (error) {
     return fail("updateSettings", error);
+  }
+}
+
+/** Cria um flashcard, para revisar a partir de hoje. */
+export async function addFlashcardAction(
+  subjectId: string,
+  topicIndex: number | null,
+  front: string,
+  back: string,
+): Promise<ActionResult<Flashcard>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    const invalid = flashcardError(subjectId, topicIndex, front, back);
+    if (invalid) return { ok: false, error: invalid };
+
+    const card = await insertFlashcard(profile.id, {
+      subjectId,
+      topicIndex,
+      front: front.trim(),
+      back: back.trim(),
+      dueOn: todayIsoDate(),
+    });
+    return { ok: true, data: card };
+  } catch (error) {
+    return fail("addFlashcard", error);
+  }
+}
+
+/** Edita o texto, a matéria ou o tópico do cartão. O agendamento não muda. */
+export async function updateFlashcardAction(
+  id: string,
+  subjectId: string,
+  topicIndex: number | null,
+  front: string,
+  back: string,
+): Promise<ActionResult<Flashcard>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    if (!isUuid(id)) return { ok: false, error: "Cartão inválido." };
+    const invalid = flashcardError(subjectId, topicIndex, front, back);
+    if (invalid) return { ok: false, error: invalid };
+
+    const card = await findFlashcard(profile.id, id);
+    if (!card) return { ok: false, error: "Esse cartão não existe mais." };
+    const saved = await saveFlashcard(profile.id, {
+      ...card,
+      subjectId,
+      topicIndex,
+      front: front.trim(),
+      back: back.trim(),
+    });
+    return { ok: true, data: saved };
+  } catch (error) {
+    return fail("updateFlashcard", error);
+  }
+}
+
+/**
+ * Registra a resposta de uma revisão. O próximo agendamento é calculado aqui,
+ * a partir do cartão gravado — o navegador manda só a resposta.
+ */
+export async function reviewFlashcardAction(id: string, grade: unknown): Promise<ActionResult<Flashcard>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    if (!isUuid(id) || !isFlashcardGrade(grade)) return { ok: false, error: "Revisão inválida." };
+
+    const card = await findFlashcard(profile.id, id);
+    if (!card) return { ok: false, error: "Esse cartão não existe mais." };
+    return { ok: true, data: await saveFlashcard(profile.id, reviewFlashcard(card, grade, todayIsoDate())) };
+  } catch (error) {
+    return fail("reviewFlashcard", error);
+  }
+}
+
+export async function deleteFlashcardAction(id: string): Promise<ActionResult> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    if (!isUuid(id)) return { ok: false, error: "Cartão inválido." };
+
+    await deleteFlashcard(profile.id, id);
+    return { ok: true, data: null };
+  } catch (error) {
+    return fail("deleteFlashcard", error);
   }
 }

@@ -4,7 +4,9 @@ import {
   CalendarCheck,
   ClipboardList,
   FastForward,
+  Layers,
   Flag,
+  Flame,
   GraduationCap,
   Target,
 } from "lucide-react";
@@ -16,6 +18,7 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatPanel } from "@/components/ui/stat-panel";
 import { Tag } from "@/components/ui/tag";
 import type { CycleEnd, ExamOutlook } from "@/lib/cycle";
+import type { Streak } from "@/lib/streak";
 import { formatLongDate, formatShortDate, fromIsoDate } from "@/lib/date";
 import { blockKey, overallProgress, type StudiedMap } from "@/lib/progress";
 import { daysBetween, type ReviewItem } from "@/lib/reviews";
@@ -33,6 +36,7 @@ interface TodayTabProps {
   reviews: ReviewItem[];
   cycleEnd: CycleEnd | null;
   examOutlook: ExamOutlook | null;
+  streak: Streak;
   /** Dia do simulado pendente desta semana, ou `null`. */
   pendingMock: string | null;
   /** Hoje é dia de simulado: sem blocos do ciclo, com a opção de adiantar. */
@@ -41,6 +45,9 @@ interface TodayTabProps {
   onToggleReview: (item: ReviewItem) => void;
   onAddMockExam: (results: Record<string, MockResult>) => void;
   onAdvanceBlock: () => void;
+  /** Flashcards para revisar hoje. */
+  flashcardsDue: number;
+  onOpenFlashcards: () => void;
 }
 
 export function TodayTab({
@@ -54,12 +61,15 @@ export function TodayTab({
   reviews,
   cycleEnd,
   examOutlook,
+  streak,
   pendingMock,
   isMockDay,
   onToggleBlock,
   onToggleReview,
   onAddMockExam,
   onAdvanceBlock,
+  flashcardsDue,
+  onOpenFlashcards,
 }: TodayTabProps) {
   const edital = overallProgress(studied, SUBJECTS);
   const isChecked = (block: ScheduledBlock) => !!week && checked.has(blockKey(week.weekStart, block));
@@ -148,6 +158,24 @@ export function TodayTab({
             </div>
           )}
         </section>
+
+        {flashcardsDue > 0 && (
+          <button
+            type="button"
+            onClick={onOpenFlashcards}
+            className="bg-surface border-line hover:border-accent-text/50 flex items-center gap-3 rounded-2xl border p-4 text-left text-sm transition-colors"
+          >
+            <span className="bg-accent-soft text-accent-text flex size-8 shrink-0 items-center justify-center rounded-lg">
+              <Layers size={16} aria-hidden />
+            </span>
+            <span className="flex-1">
+              <span className="block font-bold">
+                {flashcardsDue} flashcard{flashcardsDue > 1 ? "s" : ""} para revisar hoje
+              </span>
+              <span className="text-muted text-xs">Toque para estudar na aba Flashcards.</span>
+            </span>
+          </button>
+        )}
       </div>
 
       <aside className="grid grid-cols-2 content-start gap-3 lg:grid-cols-1">
@@ -162,8 +190,27 @@ export function TodayTab({
           </p>
         </StatPanel>
 
-        {/* Os dois painéis pequenos vêm juntos: no celular dividem uma linha. */}
-        <StatPanel icon={Target} label="Edital estudado" value={`${edital.pct}%`}>
+        <StatPanel
+          icon={Flame}
+          label="Sequência"
+          value={`${streak.current} dia${streak.current === 1 ? "" : "s"}`}
+        >
+          <p className="text-muted text-xs tabular-nums">
+            Recorde: {streak.best} dia{streak.best === 1 ? "" : "s"}
+            {streak.today.goal > 0 &&
+              (streak.today.done >= streak.today.goal
+                ? " · hoje cumprido"
+                : ` · hoje ${streak.today.done} de ${streak.today.goal} blocos`)}
+          </p>
+        </StatPanel>
+
+        {/* Hoje e Sequência dividem uma linha no celular; o Edital ocupa a seguinte. */}
+        <StatPanel
+          icon={Target}
+          label="Edital estudado"
+          className="col-span-2 lg:col-span-1"
+          value={`${edital.pct}%`}
+        >
           <ProgressBar value={edital.pct} label="Tópicos do edital estudados" />
           <p className="text-muted mt-2 text-xs tabular-nums">
             {edital.done} de {edital.total} tópicos

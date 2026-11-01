@@ -3,6 +3,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import { Evolution } from "@/components/evolution";
 import { MockExamForm } from "@/components/mock-exam-form";
 import { QuestionPanel } from "@/components/question-panel";
 import { useQuestions } from "@/components/questions-context";
@@ -30,7 +31,7 @@ import {
   type TopicAccuracy,
 } from "@/lib/questions";
 import { findSubject, SUBJECTS, topicCode } from "@/lib/subjects";
-import type { MockExam, MockResult, Pointers } from "@/lib/types";
+import type { MockExam, MockResult, Pointers, StudyLog } from "@/lib/types";
 
 /** Quantos tópicos de pior acerto aparecem. */
 const WEAK_TOPICS_SHOWN = 5;
@@ -44,6 +45,8 @@ interface ProgressTabProps {
   cycleEnd: CycleEnd | null;
   topicAccuracy: TopicAccuracy[];
   mockExams: MockExam[];
+  studyLogs: StudyLog[];
+  todayDate: string;
   onAddMockExam: (results: Record<string, MockResult>) => void;
   onDeleteMockExam: (id: string) => void;
 }
@@ -55,6 +58,8 @@ export function ProgressTab({
   cycleEnd,
   topicAccuracy,
   mockExams,
+  studyLogs,
+  todayDate,
   onAddMockExam,
   onDeleteMockExam,
 }: ProgressTabProps) {
@@ -90,6 +95,8 @@ export function ProgressTab({
           )}
         </div>
       </div>
+
+      <Evolution studyLogs={studyLogs} mockExams={mockExams} todayDate={todayDate} />
 
       <div className="mb-8 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2">
         <WeakTopics ranked={topicAccuracy} />

@@ -189,6 +189,22 @@ export interface MockExam {
   results: Record<string, MockResult>;
 }
 
+/** Um flashcard e o agendamento da repetição espaçada (lib/flashcards.ts). */
+export interface Flashcard {
+  id: string;
+  subjectId: string;
+  /** Tópico do edital, opcional. */
+  topicIndex: number | null;
+  front: string;
+  back: string;
+  /** Quando volta para revisão, `yyyy-mm-dd`. */
+  dueOn: string;
+  intervalDays: number;
+  ease: number;
+  reps: number;
+  lapses: number;
+}
+
 export interface StudyState {
   settings: Settings;
   pointers: Pointers;
@@ -197,9 +213,17 @@ export interface StudyState {
   reviewLogs: ReviewLog[];
   questionLogs: QuestionLog[];
   mockExams: MockExam[];
+  flashcards: Flashcard[];
 }
 
-export type TabId = "hoje" | "semana" | "atrasadas" | "materias" | "progresso" | "config";
+export type TabId =
+  | "hoje"
+  | "semana"
+  | "atrasadas"
+  | "materias"
+  | "flashcards"
+  | "progresso"
+  | "config";
 
 /** Pessoa que usa o app. Criada por `npm run db:seed`, sem cadastro público. */
 export interface Profile {

@@ -4,6 +4,7 @@ import {
   AlarmClock,
   BookOpen,
   CalendarDays,
+  Layers,
   ListChecks,
   Settings2,
   TrendingUp,
@@ -12,13 +13,15 @@ import {
 
 import type { TabId } from "@/lib/types";
 
-export const TABS: ReadonlyArray<{ id: TabId; label: string; icon: LucideIcon }> = [
-  { id: "hoje", label: "Hoje", icon: CalendarDays },
-  { id: "semana", label: "Semana", icon: ListChecks },
-  { id: "atrasadas", label: "Atrasadas", icon: AlarmClock },
-  { id: "materias", label: "Matérias", icon: BookOpen },
-  { id: "progresso", label: "Progresso", icon: TrendingUp },
-  { id: "config", label: "Configurar", icon: Settings2 },
+/** `short` é o nome no celular e em telas médias, onde as sete abas não cabem por extenso. */
+export const TABS: ReadonlyArray<{ id: TabId; label: string; short: string; icon: LucideIcon }> = [
+  { id: "hoje", label: "Hoje", short: "Hoje", icon: CalendarDays },
+  { id: "semana", label: "Semana", short: "Semana", icon: ListChecks },
+  { id: "atrasadas", label: "Atrasadas", short: "Atrasos", icon: AlarmClock },
+  { id: "materias", label: "Matérias", short: "Matérias", icon: BookOpen },
+  { id: "flashcards", label: "Flashcards", short: "Cards", icon: Layers },
+  { id: "progresso", label: "Progresso", short: "Progresso", icon: TrendingUp },
+  { id: "config", label: "Configurar", short: "Config", icon: Settings2 },
 ];
 
 interface TabNavProps {
@@ -46,7 +49,7 @@ export function TabNav({ active, onChange, badges = {} }: TabNavProps) {
       aria-label="Seções do ciclo"
       className="bg-surface border-line flex gap-1 rounded-xl border p-1"
     >
-      {TABS.map(({ id, label, icon: Icon }) => {
+      {TABS.map(({ id, label, short, icon: Icon }) => {
         const isActive = active === id;
         const count = badges[id] ?? 0;
         return (
@@ -57,14 +60,15 @@ export function TabNav({ active, onChange, badges = {} }: TabNavProps) {
             id={`tab-${id}`}
             aria-selected={isActive}
             aria-controls={`panel-${id}`}
-            aria-label={count > 0 ? `${label} (${count})` : undefined}
+            aria-label={count > 0 ? `${label} (${count})` : label}
             onClick={() => onChange(id)}
-            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors xl:px-3 ${
               isActive ? "bg-accent text-on-accent" : "text-muted hover:text-ink"
             }`}
           >
             <Icon size={15} aria-hidden />
-            {label}
+            <span className="xl:hidden">{short}</span>
+            <span className="hidden xl:inline">{label}</span>
             {count > 0 && (
               <Badge count={count} className={isActive ? "bg-on-accent text-accent" : ""} />
             )}
@@ -85,8 +89,8 @@ export function TabBar({ active, onChange, badges = {} }: TabNavProps) {
       aria-label="Seções do ciclo"
       className="bg-frame/95 border-line fixed inset-x-0 bottom-0 z-20 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
     >
-      <div className="mx-auto grid max-w-lg grid-cols-6">
-        {TABS.map(({ id, label, icon: Icon }) => {
+      <div className="mx-auto grid max-w-lg grid-cols-7">
+        {TABS.map(({ id, label, short, icon: Icon }) => {
           const isActive = active === id;
           const count = badges[id] ?? 0;
           return (
@@ -96,20 +100,20 @@ export function TabBar({ active, onChange, badges = {} }: TabNavProps) {
               onClick={() => onChange(id)}
               aria-current={isActive ? "page" : undefined}
               aria-controls={`panel-${id}`}
-              aria-label={count > 0 ? `${label} (${count})` : undefined}
+              aria-label={count > 0 ? `${label} (${count})` : label}
               className={`flex min-w-0 flex-col items-center gap-1 px-0.5 pt-2.5 pb-2 text-[0.64rem] font-semibold transition-colors ${
                 isActive ? "text-accent-text" : "text-muted hover:text-ink"
               }`}
             >
               <span
-                className={`relative flex h-7 w-11 items-center justify-center rounded-full transition-colors ${
+                className={`relative flex h-7 w-10 items-center justify-center rounded-full transition-colors ${
                   isActive ? "bg-accent-soft" : ""
                 }`}
               >
                 <Icon size={18} aria-hidden />
                 {count > 0 && <Badge count={count} className="absolute -top-1 right-0.5" />}
               </span>
-              <span className="max-w-full truncate">{label}</span>
+              <span className="max-w-full truncate">{short}</span>
             </button>
           );
         })}

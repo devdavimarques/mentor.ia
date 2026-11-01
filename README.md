@@ -28,8 +28,8 @@ npm install
 1. Crie um projeto em [supabase.com](https://supabase.com) (o plano gratuito basta)
 2. Abra **SQL Editor** e execute, nesta ordem, cada arquivo de
    [`supabase/migrations/`](supabase/migrations/): `0001_init.sql`,
-   `0002_study_logs_reviews_questions.sql`, `0003_lessons.sql`, `0004_profile_passwords.sql` e
-   `0005_mock_exams.sql`
+   `0002_study_logs_reviews_questions.sql`, `0003_lessons.sql`, `0004_profile_passwords.sql`,
+   `0005_mock_exams.sql` e `0006_flashcards.sql`
 3. Vá em **Settings → API** e copie `Project URL` e a chave `service_role`
 
 ### 3. Configurar as variáveis de ambiente
@@ -115,6 +115,10 @@ question_logs   profile_id, subject_id,        Lançamentos de questões: feitas
                 correct, logged_on
 mock_exams      profile_id, taken_on,          Simulados: results (jsonb) é
                 results                        subjectId → feitas / certas.
+flashcards      profile_id, subject_id,        Flashcards e o agendamento da
+                topic_index, front, back,      repetição espaçada.
+                due_on, interval_days, ease,
+                reps, lapses
 ```
 
 ## Aulas, progresso e revisões
@@ -142,15 +146,26 @@ mock_exams      profile_id, taken_on,          Simulados: results (jsonb) é
 - **Prova:** com a data definida em Configurar, a aba Hoje mostra quantos dias faltam e compara
   com a previsão de fim do ciclo. Se não fecha, testa 4 blocos por dia com a mesma função que
   regera a semana (`examOutlook`, em [`lib/cycle.ts`](lib/cycle.ts)) e diz com quantos fecha.
-- **Simulados:** a cada 2 ou 4 semanas (ou desligado), no dia da semana escolhido em
-  Configurar. Nas semanas de simulado esse dia **fica sem blocos** (`generateWeek` distribui as
+- **Simulados:** toda semana, a cada 2 ou a cada 4 semanas (ou desligado), no dia da semana
+  escolhido em Configurar. Nas semanas de simulado esse dia **fica sem blocos** (`generateWeek` distribui as
   aulas nos outros dias), e a aba Hoje lembra de fazer a prova inteira e lançar o acerto por
   matéria (a redação fica de fora). Quem quiser estudar no dia usa **Adiantar um bloco**
   (`advanceBlock`): o próximo bloco da fila vem para hoje, o resto recua uma posição e o fim do
   ciclo chega mais cedo. A aba Progresso mostra o histórico e a variação de cada matéria em
   relação ao simulado anterior; dá para lançar avulso por lá também.
-- **Marcar e desmarcar:** só o quadrado do check marca um bloco ou revisão; desmarcar pede
-  confirmação, para evitar toques sem querer.
+- **Marcar e desmarcar:** só o quadrado do check marca um bloco, uma revisão ou um tópico na
+  aba Matérias; desmarcar pede confirmação, para evitar toques sem querer.
+- **Sequência** ([`lib/streak.ts`](lib/streak.ts)): dias de estudo seguidos com a meta cumprida
+  (pelo menos `blocksPerDay` aulas do ciclo marcadas no dia), e o recorde. Folga e dia de
+  simulado não contam nem quebram; hoje só entra quando a meta é batida.
+- **Evolução** (aba Progresso, [`lib/evolution.ts`](lib/evolution.ts)): gráficos do acerto em cada
+  simulado (total ou por matéria) e, semana a semana, do edital estudado ou do acerto nas
+  questões (no total ou por matéria). Cada gráfico tem tooltip e uma tabela com os mesmos números.
+- **Flashcards** (aba Flashcards, [`lib/flashcards.ts`](lib/flashcards.ts)): cartões de frente e
+  verso por matéria (e tópico, opcional), revisados com repetição espaçada no estilo do Anki.
+  Cada resposta (Errei, Difícil, Bom, Fácil) decide quando o cartão volta; "Errei" o traz de novo
+  na mesma sessão. O servidor recalcula o agendamento a partir do cartão gravado. A aba Hoje
+  avisa quantos cartões estão para revisar.
 
 As matérias, os tópicos do edital e as aulas **não** estão no banco: são dados estáticos em
 [`lib/subjects.ts`](lib/subjects.ts) e [`lib/lessons.ts`](lib/lessons.ts), versionados junto
@@ -205,6 +220,9 @@ lib/
   reviews.ts          Revisões espaçadas (1, 7 e 30 dias)
   questions.ts        Estatísticas, validação das questões e tópicos de pior acerto
   mock-exams.ts       Simulados: quando cai, validação e evolução por matéria
+  flashcards.ts       Flashcards: repetição espaçada e validação
+  streak.ts           Sequência de dias com a meta cumprida
+  evolution.ts        Séries dos gráficos de evolução
   state-schema.ts     Validação do jsonb do banco e das entradas das actions
   session.ts          Cookie do perfil (server-only)
   study-session.ts    Perfil corrente + carga do ciclo do dia (server-only)

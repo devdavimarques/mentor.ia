@@ -3,16 +3,20 @@
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 
 import {
+  addFlashcardAction,
   addMockExamAction,
   addQuestionsAction,
   advanceBlockAction,
+  deleteFlashcardAction,
   deleteMockExamAction,
   deleteQuestionsAction,
   markReviewAction,
+  reviewFlashcardAction,
   setTopicStudiedAction,
   toggleBlockAction,
   unmarkReviewAction,
   updateExamDateAction,
+  updateFlashcardAction,
   updateSettingsAction,
   type ActionResult,
 } from "@/app/actions";
@@ -23,6 +27,7 @@ import {
   type ExamOutlook,
 } from "@/lib/cycle";
 import { fromIsoDate, isoWeekday } from "@/lib/date";
+import { reviewFlashcard as scheduleReview, type FlashcardGrade } from "@/lib/flashcards";
 import { pendingMock as calcPendingMock } from "@/lib/mock-exams";
 import {
   checkedBlocks,
@@ -49,9 +54,11 @@ import {
   regenerateWeek,
   type OverdueBlock,
 } from "@/lib/schedule";
+import { studyStreak, type Streak } from "@/lib/streak";
 import { DEFAULT_WEIGHTS } from "@/lib/subjects";
 import type {
   BlockRef,
+  Flashcard,
   MockExam,
   MockResult,
   QuestionLog,
@@ -93,6 +100,8 @@ export interface StudyCycle {
   topicAccuracy: TopicAccuracy[];
   /** Dia do simulado desta semana, se ele está pendente. */
   pendingMock: string | null;
+  /** Dias seguidos com a meta de blocos cumprida, e o recorde. */
+  streak: Streak;
   saving: boolean;
   error: string | null;
   dismissError: () => void;
@@ -119,6 +128,11 @@ export interface StudyCycle {
   isMockDay: boolean;
   addMockExam: (results: Record<string, MockResult>) => void;
   deleteMockExam: (id: string) => void;
+  addFlashcard: (subjectId: string, topicIndex: number | null, front: string, back: string) => void;
+  updateFlashcard: (id: string, subjectId: string, topicIndex: number | null, front: string, back: string) => void;
+  /** Resposta de uma revisão: o cartão é reagendado na hora e o servidor confirma. */
+  reviewFlashcard: (id: string, grade: FlashcardGrade) => void;
+  deleteFlashcard: (id: string) => void;
 }
 
 /** Troca o registro otimista pelo que o banco gravou (a data vem do servidor). */
@@ -478,6 +492,82 @@ export function useStudyCycle(
     [mutate],
   );
 
+  const addFlashcard = useCallback(
+    (subjectId: string, topicIndex: number | null, front: string, back: string) => {
+      // Mesmo esquema das questões: id provisório até o banco devolver o definitivo.
+      const optimistic: Flashcard = {
+        id: `${persist ? PENDING_ID_PREFIX : "local-"}${++pendingIds.current}`,
+        subjectId,
+        topicIndex,
+        front: front.trim(),
+        back: back.trim(),
+        dueOn: todayDate,
+        intervalDays: 0,
+        ease: 2.5,
+        reps: 0,
+        lapses: 0,
+      };
+      mutate(
+        (s) => ({ ...s, flashcards: [...s.flashcards, optimistic] }),
+        (s) => ({ ...s, flashcards: s.flashcards.filter((c) => c !== optimistic) }),
+        () => addFlashcardAction(subjectId, topicIndex, front, back),
+        (s, saved) => ({ ...s, flashcards: s.flashcards.map((c) => (c === optimistic ? saved : c)) }),
+      );
+    },
+    [mutate, todayDate, persist],
+  );
+
+  /** Troca um cartão existente: aplica já, desfaz se falhar, confirma com o que o banco gravou. */
+  const replaceFlashcard = useCallback(
+    (id: string, next: (card: Flashcard) => Flashcard, request: () => Promise<ActionResult<Flashcard>>) => {
+      if (id.startsWith(PENDING_ID_PREFIX)) return;
+      const existing = stateRef.current.flashcards.find((c) => c.id === id);
+      if (!existing) return;
+      const updated = next(existing);
+      mutate(
+        (s) => ({ ...s, flashcards: s.flashcards.map((c) => (c.id === id ? updated : c)) }),
+        (s) => ({ ...s, flashcards: s.flashcards.map((c) => (c.id === id ? existing : c)) }),
+        request,
+        (s, saved) => ({ ...s, flashcards: s.flashcards.map((c) => (c.id === id ? saved : c)) }),
+      );
+    },
+    [mutate],
+  );
+
+  const updateFlashcard = useCallback(
+    (id: string, subjectId: string, topicIndex: number | null, front: string, back: string) =>
+      replaceFlashcard(
+        id,
+        (card) => ({ ...card, subjectId, topicIndex, front: front.trim(), back: back.trim() }),
+        () => updateFlashcardAction(id, subjectId, topicIndex, front, back),
+      ),
+    [replaceFlashcard],
+  );
+
+  const reviewFlashcard = useCallback(
+    (id: string, grade: FlashcardGrade) =>
+      replaceFlashcard(
+        id,
+        (card) => scheduleReview(card, grade, todayDate),
+        () => reviewFlashcardAction(id, grade),
+      ),
+    [replaceFlashcard, todayDate],
+  );
+
+  const deleteFlashcard = useCallback(
+    (id: string) => {
+      if (id.startsWith(PENDING_ID_PREFIX)) return;
+      const existing = stateRef.current.flashcards.find((c) => c.id === id);
+      if (!existing) return;
+      mutate(
+        (s) => ({ ...s, flashcards: s.flashcards.filter((c) => c.id !== id) }),
+        (s) => ({ ...s, flashcards: [...s.flashcards, existing] }),
+        () => deleteFlashcardAction(id),
+      );
+    },
+    [mutate],
+  );
+
   const today = useMemo(() => fromIsoDate(todayDate), [todayDate]);
   const todayIso = isoWeekday(today);
 
@@ -519,6 +609,11 @@ export function useStudyCycle(
   );
 
   const nextLessons = useMemo(() => calcNextLessons(state.week, checked), [state.week, checked]);
+
+  const streak = useMemo(
+    () => studyStreak(state.studyLogs, state.settings, todayDate),
+    [state.studyLogs, state.settings, todayDate],
+  );
 
   const cycleEnd = useMemo(
     () => projectCycleEnd(state, checked, todayDate),
@@ -567,6 +662,7 @@ export function useStudyCycle(
     examOutlook,
     topicAccuracy,
     pendingMock,
+    streak,
     saving,
     error,
     dismissError,
@@ -586,5 +682,9 @@ export function useStudyCycle(
     isMockDay,
     addMockExam,
     deleteMockExam,
+    addFlashcard,
+    updateFlashcard,
+    reviewFlashcard,
+    deleteFlashcard,
   };
 }

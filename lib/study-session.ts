@@ -64,5 +64,6 @@ export function guestCycle(): StudyState {
     reviewLogs: [],
     questionLogs: [],
     mockExams: [],
+    flashcards: [],
   };
 }

@@ -20,6 +20,7 @@ import type {
 } from "@/lib/types";
 
 import { db, DatabaseError } from "./client";
+import { loadFlashcards } from "./flashcards";
 import { loadMockExams } from "./mock-exams";
 
 interface StudyStateRow {
@@ -116,7 +117,7 @@ function compact<T>(items: (T | null)[]): T[] {
 
 /** Estado completo do ciclo de um perfil. Perfil sem linha ainda vem no padrão. */
 export async function loadStudyState(profileId: string): Promise<StudyState> {
-  const [stateResult, studyResult, reviewResult, questionResult, mockExams] = await Promise.all([
+  const [stateResult, studyResult, reviewResult, questionResult, mockExams, flashcards] = await Promise.all([
     db().from("study_states").select("settings, pointers, week").eq("profile_id", profileId).maybeSingle(),
     db().from("study_logs").select(STUDY_LOG_COLUMNS).eq("profile_id", profileId),
     db()
@@ -129,6 +130,7 @@ export async function loadStudyState(profileId: string): Promise<StudyState> {
       .eq("profile_id", profileId)
       .order("created_at", { ascending: true }),
     loadMockExams(profileId),
+    loadFlashcards(profileId),
   ]);
 
   if (stateResult.error) throw new DatabaseError("carregar o ciclo", stateResult.error.message);
@@ -148,6 +150,7 @@ export async function loadStudyState(profileId: string): Promise<StudyState> {
     reviewLogs: compact(((reviewResult.data as ReviewLogRow[] | null) ?? []).map(toReviewLog)),
     questionLogs: compact(((questionResult.data as QuestionLogRow[] | null) ?? []).map(toQuestionLog)),
     mockExams,
+    flashcards,
   };
 }
 

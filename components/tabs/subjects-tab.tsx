@@ -96,33 +96,39 @@ interface TopicRowProps {
   onToggle: () => void;
 }
 
+/**
+ * Linha de um tópico. Como nos blocos, só o quadrado do check marca, e
+ * desmarcar pede confirmação, para não marcar nem desmarcar sem querer.
+ */
 function TopicRow({ subject, topicIndex, studiedOn, lessons, manual, onToggle }: TopicRowProps) {
   const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const { logs } = useQuestions();
   const stats = topicQuestionStats(logs, subject.id, topicIndex);
   const done = studiedOn !== null;
   // Concluído pelas aulas: não há marcação manual para desfazer aqui.
   const byLessons = done && !manual;
+  // Desmarcado por fora (ex.: gravação revertida): a pergunta não volta sozinha depois.
+  if (confirming && !done) setConfirming(false);
 
   return (
     <div className="@container bg-surface border-line hover:border-accent-text/50 rounded-xl border transition-colors">
       <div className="flex items-start">
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-pressed={done}
-          disabled={byLessons}
-          title={byLessons ? "Concluído pelas aulas do ciclo" : undefined}
-          className="flex min-w-0 flex-1 items-start gap-3 rounded-xl px-3 py-3 text-left text-sm disabled:cursor-default"
-        >
-          <span
-            aria-hidden
-            className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border-[1.5px] ${
-              done ? "bg-success border-success text-white" : "border-line"
+        <div className="flex min-w-0 flex-1 items-start gap-3 px-3 py-3 text-left text-sm">
+          {/* O `before` invisível aumenta a área de toque sem mudar o tamanho do quadrado. */}
+          <button
+            type="button"
+            onClick={() => (done ? setConfirming(true) : onToggle())}
+            aria-pressed={done}
+            disabled={byLessons}
+            aria-label={`${done ? "Desmarcar" : "Marcar como estudado"}: ${topicCode(subject, topicIndex)}`}
+            title={byLessons ? "Concluído pelas aulas do ciclo" : undefined}
+            className={`relative mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border-[1.5px] transition-colors before:absolute before:-inset-2.5 before:content-[''] disabled:cursor-default ${
+              done ? "bg-success border-success text-white" : "border-line hover:border-accent-text"
             }`}
           >
-            {done && <Check size={13} strokeWidth={3} />}
-          </span>
+            {done && <Check size={13} strokeWidth={3} aria-hidden />}
+          </button>
           {/* Código, texto e contagem empilhados: o texto do edital ganha a largura toda. */}
           <span className="min-w-0 flex-1">
             <span className="text-accent-text block font-mono text-[0.7rem]">
@@ -141,10 +147,38 @@ function TopicRow({ subject, topicIndex, studiedOn, lessons, manual, onToggle }:
               </span>
             </span>
           </span>
-        </button>
+        </div>
 
         <QuestionsToggle open={open} pct={stats.pct} onClick={() => setOpen((v) => !v)} />
       </div>
+
+      {confirming && done && (
+        <div
+          role="alertdialog"
+          aria-label="Confirmar desmarcação"
+          className="border-line flex flex-wrap items-center gap-2 border-t px-3 py-3 text-sm"
+        >
+          <span className="flex-1 font-medium">Desmarcar o tópico como estudado?</span>
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            className="text-muted hover:text-ink rounded-xl px-3 py-1.5 font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            autoFocus
+            onClick={() => {
+              setConfirming(false);
+              onToggle();
+            }}
+            className="border-danger/40 text-danger hover:bg-danger/10 rounded-xl border px-3 py-1.5 font-semibold transition-colors"
+          >
+            Desmarcar
+          </button>
+        </div>
+      )}
 
       {open && (
         <div className="border-line border-t px-3 py-3">

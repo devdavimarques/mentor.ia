@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/app-header";
 import { LessonOrderProvider } from "@/components/lesson-order-context";
 import { QuestionsProvider } from "@/components/questions-context";
 import { TabBar, TabNav } from "@/components/tab-nav";
+import { FlashcardsTab } from "@/components/tabs/flashcards-tab";
 import { OverdueTab } from "@/components/tabs/overdue-tab";
 import { ProgressTab } from "@/components/tabs/progress-tab";
 import { SettingsTab } from "@/components/tabs/settings-tab";
@@ -14,6 +15,7 @@ import { SubjectsTab } from "@/components/tabs/subjects-tab";
 import { TodayTab } from "@/components/tabs/today-tab";
 import { WeekTab } from "@/components/tabs/week-tab";
 import { useStudyCycle } from "@/hooks/use-study-cycle";
+import { dueFlashcards } from "@/lib/flashcards";
 import { mockTakenInWeek } from "@/lib/mock-exams";
 import { blockKey } from "@/lib/progress";
 import { mockDayOfWeek } from "@/lib/schedule";
@@ -53,6 +55,7 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     examOutlook,
     topicAccuracy,
     pendingMock,
+    streak,
     saving,
     error,
     dismissError,
@@ -72,6 +75,10 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     isMockDay,
     addMockExam,
     deleteMockExam,
+    addFlashcard,
+    updateFlashcard,
+    reviewFlashcard,
+    deleteFlashcard,
   } = useStudyCycle(initialState, todayDate, !guest);
 
   const questionsApi = useMemo(
@@ -79,9 +86,11 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     [state.questionLogs, addQuestions, deleteQuestions],
   );
 
-  // Contador da aba: só as atrasadas ainda sem fazer.
+  const flashcardsDue = dueFlashcards(state.flashcards, todayDate).length;
+  // Contadores das abas: atrasadas ainda sem fazer e cartões para revisar hoje.
   const badges = {
     atrasadas: overdue.filter((o) => !checked.has(blockKey(o.weekStart, o.block))).length,
+    flashcards: flashcardsDue,
   };
 
   return (
@@ -142,12 +151,26 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
               reviews={reviews}
               cycleEnd={cycleEnd}
               examOutlook={examOutlook}
+              streak={streak}
               pendingMock={pendingMock}
               isMockDay={isMockDay}
               onToggleBlock={toggleBlock}
               onToggleReview={toggleReview}
               onAddMockExam={addMockExam}
               onAdvanceBlock={advanceOneBlock}
+              flashcardsDue={flashcardsDue}
+              onOpenFlashcards={() => setTab("flashcards")}
+            />
+          )}
+
+          {tab === "flashcards" && (
+            <FlashcardsTab
+              cards={state.flashcards}
+              todayDate={todayDate}
+              onAdd={addFlashcard}
+              onUpdate={updateFlashcard}
+              onReview={reviewFlashcard}
+              onDelete={deleteFlashcard}
             />
           )}
 
@@ -190,6 +213,8 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
               cycleEnd={cycleEnd}
               topicAccuracy={topicAccuracy}
               mockExams={state.mockExams}
+              studyLogs={state.studyLogs}
+              todayDate={todayDate}
               onAddMockExam={addMockExam}
               onDeleteMockExam={deleteMockExam}
             />

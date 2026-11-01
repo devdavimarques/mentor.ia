@@ -390,7 +390,7 @@ export const DEFAULT_WEIGHTS: Readonly<Record<string, number>> = Object.fromEntr
 );
 
 /** Frequência dos simulados, em semanas; 0 = desligado. */
-export const MOCK_EVERY_WEEKS_OPTIONS = [0, 2, 4] as const;
+export const MOCK_EVERY_WEEKS_OPTIONS = [0, 1, 2, 4] as const;
 
 export const DEFAULT_SETTINGS: Settings = {
   activeDays: [1, 2, 3, 4, 5, 6],

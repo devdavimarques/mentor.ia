@@ -128,7 +128,8 @@ export function SettingsTab({
           </p>
           <div className="flex flex-wrap gap-2">
             {MOCK_EVERY_WEEKS_OPTIONS.map((weeks) => {
-              const label = weeks === 0 ? "Desligado" : `A cada ${weeks} semanas`;
+              const label =
+                weeks === 0 ? "Desligado" : weeks === 1 ? "Toda semana" : `A cada ${weeks} semanas`;
               return (
                 <Chip
                   key={weeks}
