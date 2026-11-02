@@ -12,6 +12,7 @@ import {
   deleteMockExamAction,
   deleteQuestionsAction,
   deleteStudySessionAction,
+  importFlashcardsAction,
   markReviewAction,
   reviewFlashcardAction,
   setLessonLinkAction,
@@ -153,6 +154,8 @@ export interface StudyCycle {
   /** Resposta de uma revisão: o cartão é reagendado na hora e o servidor confirma. */
   reviewFlashcard: (id: string, grade: FlashcardGrade) => void;
   deleteFlashcard: (id: string) => void;
+  /** Cria de uma vez os cartões lidos de uma planilha. */
+  importFlashcards: (cards: { subjectId: string; topicIndex: number | null; front: string; back: string }[]) => void;
 }
 
 /** Troca o registro otimista pelo que o banco gravou (a data vem do servidor). */
@@ -607,6 +610,31 @@ export function useStudyCycle(
     [mutate, todayDate, persist],
   );
 
+  const importFlashcards = useCallback(
+    (cards: { subjectId: string; topicIndex: number | null; front: string; back: string }[]) => {
+      const optimistic: Flashcard[] = cards.map((c) => ({
+        id: `${persist ? PENDING_ID_PREFIX : "local-"}${++pendingIds.current}`,
+        subjectId: c.subjectId,
+        topicIndex: c.topicIndex,
+        front: c.front.trim(),
+        back: c.back.trim(),
+        dueOn: todayDate,
+        intervalDays: 0,
+        ease: 2.5,
+        reps: 0,
+        lapses: 0,
+      }));
+      const added = new Set(optimistic);
+      mutate(
+        (s) => ({ ...s, flashcards: [...s.flashcards, ...optimistic] }),
+        (s) => ({ ...s, flashcards: s.flashcards.filter((c) => !added.has(c)) }),
+        () => importFlashcardsAction(cards),
+        (s, saved) => ({ ...s, flashcards: [...s.flashcards.filter((c) => !added.has(c)), ...saved] }),
+      );
+    },
+    [mutate, todayDate, persist],
+  );
+
   /** Troca um cartão existente: aplica já, desfaz se falhar, confirma com o que o banco gravou. */
   const replaceFlashcard = useCallback(
     (id: string, next: (card: Flashcard) => Flashcard, request: () => Promise<ActionResult<Flashcard>>) => {
@@ -780,5 +808,6 @@ export function useStudyCycle(
     updateFlashcard,
     reviewFlashcard,
     deleteFlashcard,
+    importFlashcards,
   };
 }

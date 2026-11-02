@@ -184,6 +184,9 @@ flashcards      profile_id, subject_id,        Flashcards e o agendamento da
   Cada resposta (Errei, Difícil, Bom, Fácil) decide quando o cartão volta; "Errei" o traz de novo
   na mesma sessão. O servidor recalcula o agendamento a partir do cartão gravado. A aba Hoje
   avisa quantos cartões estão para revisar.
+  **Importar** baixa um modelo CSV ([`lib/flashcard-csv.ts`](lib/flashcard-csv.ts)) com uma linha
+  por tópico do edital (matéria e código preenchidos); preenchida a frente e o verso, a planilha
+  volta pelo mesmo botão, que mostra os cartões prontos e as linhas com problema antes de criar.
 
 As matérias, os tópicos do edital e as aulas **não** estão no banco: são dados estáticos em
 [`lib/subjects.ts`](lib/subjects.ts) e [`lib/lessons.ts`](lib/lessons.ts), versionados junto

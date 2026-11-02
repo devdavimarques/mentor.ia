@@ -87,6 +87,7 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     updateFlashcard,
     reviewFlashcard,
     deleteFlashcard,
+    importFlashcards,
   } = useStudyCycle(initialState, todayDate, !guest);
 
   const questionsApi = useMemo(
@@ -206,6 +207,7 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
               onUpdate={updateFlashcard}
               onReview={reviewFlashcard}
               onDelete={deleteFlashcard}
+              onImport={importFlashcards}
             />
           )}
 

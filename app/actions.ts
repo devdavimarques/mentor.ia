@@ -14,12 +14,19 @@ import {
   unmarkBlock,
   unmarkReview,
 } from "@/lib/db/logs";
-import { deleteFlashcard, findFlashcard, insertFlashcard, saveFlashcard } from "@/lib/db/flashcards";
+import {
+  deleteFlashcard,
+  findFlashcard,
+  insertFlashcard,
+  insertFlashcards,
+  saveFlashcard,
+} from "@/lib/db/flashcards";
 import { saveLessonLink } from "@/lib/db/lesson-links";
 import { deleteMockExam, insertMockExam } from "@/lib/db/mock-exams";
 import { deleteStudySession, insertStudySession } from "@/lib/db/study-sessions";
 import { findProfileCredentials } from "@/lib/db/profiles";
 import { loadStudyState, saveSchedule } from "@/lib/db/study-state";
+import { MAX_IMPORT_CARDS } from "@/lib/flashcard-csv";
 import { flashcardError, isFlashcardGrade, reviewFlashcard } from "@/lib/flashcards";
 import { normalizeLessonLink } from "@/lib/lesson-links";
 import { mockDetailsError, mockResultsError, parseMockResults } from "@/lib/mock-exams";
@@ -488,6 +495,44 @@ export async function addFlashcardAction(
     return { ok: true, data: card };
   } catch (error) {
     return fail("addFlashcard", error);
+  }
+}
+
+/**
+ * Importa cartões de uma planilha. O navegador já leu e conferiu o arquivo,
+ * mas tudo é validado de novo aqui; um cartão inválido recusa o lote inteiro.
+ */
+export async function importFlashcardsAction(rawCards: unknown): Promise<ActionResult<Flashcard[]>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    if (!Array.isArray(rawCards) || rawCards.length === 0) return { ok: false, error: "Nenhum cartão para importar." };
+    if (rawCards.length > MAX_IMPORT_CARDS) {
+      return { ok: false, error: `No máximo ${MAX_IMPORT_CARDS} cartões por importação.` };
+    }
+
+    const dueOn = todayIsoDate();
+    const cards: Pick<Flashcard, "subjectId" | "topicIndex" | "front" | "back" | "dueOn">[] = [];
+    for (const [i, raw] of rawCards.entries()) {
+      if (!isRecord(raw)) return { ok: false, error: `Cartão ${i + 1} inválido.` };
+      const { subjectId, topicIndex, front, back } = raw;
+      const topic = topicIndex === null ? null : topicIndex;
+      const invalid =
+        typeof subjectId !== "string" || typeof front !== "string" || typeof back !== "string"
+          ? "dados incompletos"
+          : flashcardError(subjectId, topic as number | null, front, back);
+      if (invalid) return { ok: false, error: `Cartão ${i + 1}: ${invalid}` };
+      cards.push({
+        subjectId: subjectId as string,
+        topicIndex: topic as number | null,
+        front: (front as string).trim(),
+        back: (back as string).trim(),
+        dueOn,
+      });
+    }
+    return { ok: true, data: await insertFlashcards(profile.id, cards) };
+  } catch (error) {
+    return fail("importFlashcards", error);
   }
 }
 

@@ -98,6 +98,29 @@ export async function insertFlashcard(
   return requireCard(data, "criar o cartão");
 }
 
+/** Cria vários cartões de uma vez (importação), todos para revisar a partir de `dueOn`. */
+export async function insertFlashcards(
+  profileId: string,
+  cards: Pick<Flashcard, "subjectId" | "topicIndex" | "front" | "back" | "dueOn">[],
+): Promise<Flashcard[]> {
+  const { data, error } = await db()
+    .from("flashcards")
+    .insert(
+      cards.map((card) => ({
+        profile_id: profileId,
+        subject_id: card.subjectId,
+        topic_index: card.topicIndex,
+        front: card.front,
+        back: card.back,
+        due_on: card.dueOn,
+      })),
+    )
+    .select(COLUMNS);
+
+  if (error) throw new DatabaseError("importar os cartões", error.message);
+  return ((data as FlashcardRow[] | null) ?? []).map((row) => requireCard(row, "importar os cartões"));
+}
+
 /** Grava texto e agendamento. Filtra pelo perfil: id de outro perfil não muda nada. */
 export async function saveFlashcard(profileId: string, card: Flashcard): Promise<Flashcard> {
   const { data, error } = await db()
