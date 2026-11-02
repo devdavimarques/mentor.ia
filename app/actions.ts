@@ -27,7 +27,15 @@ import { deleteStudySession, insertStudySession } from "@/lib/db/study-sessions"
 import { findProfileCredentials } from "@/lib/db/profiles";
 import { loadStudyState, saveSchedule } from "@/lib/db/study-state";
 import { MAX_IMPORT_CARDS } from "@/lib/flashcard-csv";
-import { flashcardError, isFlashcardGrade, reviewFlashcard } from "@/lib/flashcards";
+import {
+  flashcardError,
+  forgetFlashcard,
+  isFlashcardGrade,
+  MAX_NEW_PER_DAY,
+  MAX_REVIEWS_PER_DAY,
+  parseSchedule,
+  reviewFlashcard,
+} from "@/lib/flashcards";
 import { normalizeLessonLink } from "@/lib/lesson-links";
 import { mockDetailsError, mockResultsError, parseMockResults } from "@/lib/mock-exams";
 import { checkedBlocks } from "@/lib/progress";
@@ -578,9 +586,86 @@ export async function reviewFlashcardAction(id: string, grade: unknown): Promise
 
     const card = await findFlashcard(profile.id, id);
     if (!card) return { ok: false, error: "Esse cartão não existe mais." };
-    return { ok: true, data: await saveFlashcard(profile.id, reviewFlashcard(card, grade, todayIsoDate())) };
+    const reviewed = reviewFlashcard(card, grade, todayIsoDate(), Date.now());
+    return { ok: true, data: await saveFlashcard(profile.id, reviewed) };
   } catch (error) {
     return fail("reviewFlashcard", error);
+  }
+}
+
+/** Suspende o cartão (fica fora das sessões) ou o reativa. */
+export async function setFlashcardSuspendedAction(id: string, suspended: unknown): Promise<ActionResult<Flashcard>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    if (!isUuid(id) || typeof suspended !== "boolean") return { ok: false, error: "Cartão inválido." };
+
+    const card = await findFlashcard(profile.id, id);
+    if (!card) return { ok: false, error: "Esse cartão não existe mais." };
+    return { ok: true, data: await saveFlashcard(profile.id, { ...card, suspended }) };
+  } catch (error) {
+    return fail("setFlashcardSuspended", error);
+  }
+}
+
+/** "Esquecer": o cartão volta a ser novo, com o texto intacto. */
+export async function forgetFlashcardAction(id: string): Promise<ActionResult<Flashcard>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    if (!isUuid(id)) return { ok: false, error: "Cartão inválido." };
+
+    const card = await findFlashcard(profile.id, id);
+    if (!card) return { ok: false, error: "Esse cartão não existe mais." };
+    return { ok: true, data: await saveFlashcard(profile.id, forgetFlashcard(card, todayIsoDate())) };
+  } catch (error) {
+    return fail("forgetFlashcard", error);
+  }
+}
+
+/**
+ * Desfaz a última resposta: volta o agendamento ao que era antes dela. O
+ * navegador manda o agendamento anterior, aceito só dentro das faixas válidas
+ * e só para um cartão do próprio perfil; o texto não muda.
+ */
+export async function restoreFlashcardAction(id: string, schedule: unknown): Promise<ActionResult<Flashcard>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    const parsed = parseSchedule(schedule, todayIsoDate());
+    if (!isUuid(id) || !parsed) return { ok: false, error: "Não foi possível desfazer." };
+
+    const card = await findFlashcard(profile.id, id);
+    if (!card) return { ok: false, error: "Esse cartão não existe mais." };
+    return { ok: true, data: await saveFlashcard(profile.id, { ...card, ...parsed }) };
+  } catch (error) {
+    return fail("restoreFlashcard", error);
+  }
+}
+
+/** Limites diários de novos e de revisões. Como a data da prova, não mexe no cronograma. */
+export async function updateFlashcardLimitsAction(
+  newPerDay: unknown,
+  reviewsPerDay: unknown,
+): Promise<ActionResult<{ newPerDay: number; reviewsPerDay: number }>> {
+  try {
+    const profile = await currentProfile();
+    if (!profile) return { ok: false, error: SESSION_EXPIRED };
+    const valid = (v: unknown, min: number, max: number): v is number =>
+      Number.isInteger(v) && (v as number) >= min && (v as number) <= max;
+    if (!valid(newPerDay, 0, MAX_NEW_PER_DAY) || !valid(reviewsPerDay, 1, MAX_REVIEWS_PER_DAY)) {
+      return { ok: false, error: "Limites inválidos." };
+    }
+
+    const state = await loadStudyState(profile.id);
+    const { snapshot } = syncCycle(state, todayIsoDate());
+    await saveSchedule(profile.id, {
+      ...snapshot,
+      settings: { ...snapshot.settings, flashcardNewPerDay: newPerDay, flashcardReviewsPerDay: reviewsPerDay },
+    });
+    return { ok: true, data: { newPerDay, reviewsPerDay } };
+  } catch (error) {
+    return fail("updateFlashcardLimits", error);
   }
 }
 

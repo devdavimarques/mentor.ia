@@ -111,7 +111,13 @@ export function parseSettings(value: unknown): Settings {
       : DEFAULT_SETTINGS.mockEveryWeeks,
     mockDay: isIsoDay(value.mockDay) ? value.mockDay : DEFAULT_SETTINGS.mockDay,
     mockTargets: parseMockTargets(value.mockTargets),
+    flashcardNewPerDay: intIn(value.flashcardNewPerDay, 0, 200) ?? DEFAULT_SETTINGS.flashcardNewPerDay,
+    flashcardReviewsPerDay: intIn(value.flashcardReviewsPerDay, 1, 2000) ?? DEFAULT_SETTINGS.flashcardReviewsPerDay,
   };
+}
+
+function intIn(value: unknown, min: number, max: number): number | null {
+  return Number.isInteger(value) && (value as number) >= min && (value as number) <= max ? (value as number) : null;
 }
 
 /** Metas de acerto nos simulados: só matérias objetivas, inteiros de 1 a 100. */

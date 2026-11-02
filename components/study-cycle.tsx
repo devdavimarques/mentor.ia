@@ -18,7 +18,7 @@ import { SubjectsTab } from "@/components/tabs/subjects-tab";
 import { TodayTab } from "@/components/tabs/today-tab";
 import { WeekTab } from "@/components/tabs/week-tab";
 import { useStudyCycle } from "@/hooks/use-study-cycle";
-import { dueFlashcards } from "@/lib/flashcards";
+import { deckLimits, dueTodayCount } from "@/lib/flashcards";
 import { mockTakenInWeek } from "@/lib/mock-exams";
 import { blockKey } from "@/lib/progress";
 import { mockDayOfWeek } from "@/lib/schedule";
@@ -87,6 +87,10 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     updateFlashcard,
     reviewFlashcard,
     deleteFlashcard,
+    setFlashcardSuspended,
+    forgetFlashcard,
+    restoreFlashcard,
+    setFlashcardLimits,
     importFlashcards,
   } = useStudyCycle(initialState, todayDate, !guest);
 
@@ -104,7 +108,7 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
   const timer = useStudyTimerState(`mentor.ia:cronometro:${guest ? "visitante" : profile.id}`);
   const timerApi = useMemo(() => ({ active: timer.active, start: timer.start }), [timer.active, timer.start]);
 
-  const flashcardsDue = dueFlashcards(state.flashcards, todayDate).length;
+  const flashcardsDue = dueTodayCount(state.flashcards, todayDate, state.settings);
   // Contadores das abas: atrasadas ainda sem fazer, simulado pendente e cartões para revisar hoje.
   const badges = {
     atrasadas: overdue.filter((o) => !checked.has(blockKey(o.weekStart, o.block))).length,
@@ -208,6 +212,11 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
               onReview={reviewFlashcard}
               onDelete={deleteFlashcard}
               onImport={importFlashcards}
+              limits={deckLimits(state.settings)}
+              onSuspend={setFlashcardSuspended}
+              onForget={forgetFlashcard}
+              onRestore={restoreFlashcard}
+              onSetLimits={setFlashcardLimits}
             />
           )}
 

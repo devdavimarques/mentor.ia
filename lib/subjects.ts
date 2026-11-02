@@ -401,4 +401,6 @@ export const DEFAULT_SETTINGS: Settings = {
   mockEveryWeeks: 2,
   mockDay: 6,
   mockTargets: {},
+  flashcardNewPerDay: 20,
+  flashcardReviewsPerDay: 200,
 };

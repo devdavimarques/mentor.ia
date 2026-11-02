@@ -29,7 +29,8 @@ npm install
 2. Abra **SQL Editor** e execute, nesta ordem, cada arquivo de
    [`supabase/migrations/`](supabase/migrations/): `0001_init.sql`,
    `0002_study_logs_reviews_questions.sql`, `0003_lessons.sql`, `0004_profile_passwords.sql`,
-   `0005_mock_exams.sql`, `0006_flashcards.sql` e `0007_study_time_links_scores.sql`
+   `0005_mock_exams.sql`, `0006_flashcards.sql`, `0007_study_time_links_scores.sql` e
+   `0008_flashcards_anki.sql`
 3. Vá em **Settings → API** e copie `Project URL` e a chave `service_role`
 
 ### 3. Configurar as variáveis de ambiente
@@ -179,14 +180,16 @@ flashcards      profile_id, subject_id,        Flashcards e o agendamento da
 - **Evolução** ([`lib/evolution.ts`](lib/evolution.ts)): na aba Simulados, a nota em cada
   simulado (total ou por matéria); na aba Progresso, semana a semana, o edital estudado ou o
   acerto nas questões (no total ou por matéria). Cada gráfico tem tooltip e uma tabela com os mesmos números.
-- **Flashcards** (aba Flashcards, [`lib/flashcards.ts`](lib/flashcards.ts)): cartões de frente e
-  verso por matéria (e tópico, opcional), revisados com repetição espaçada no estilo do Anki.
-  Cada resposta (Errei, Difícil, Bom, Fácil) decide quando o cartão volta; "Errei" o traz de novo
-  na mesma sessão. O servidor recalcula o agendamento a partir do cartão gravado. A aba Hoje
-  avisa quantos cartões estão para revisar.
-  **Importar** baixa um modelo CSV ([`lib/flashcard-csv.ts`](lib/flashcard-csv.ts)) com uma linha
-  por tópico do edital (matéria e código preenchidos); preenchida a frente e o verso, a planilha
-  volta pelo mesmo botão, que mostra os cartões prontos e as linhas com problema antes de criar.
+- **Flashcards** (aba Flashcards, [`lib/flashcards.ts`](lib/flashcards.ts)), no modelo do Anki:
+  baralhos por matéria com as contagens de novos, em aprendizado e para revisar; etapas de
+  aprendizado em minutos (1 e 10) antes de o cartão ir para revisão em dias; lapso leva a
+  reaprendizado de 10 minutos; 8 erros tornam o cartão "sanguessuga" (suspenso). Limite diário de
+  novos e de revisões (20 e 200, em Opções, gravados em `settings`). Na sessão: Espaço mostra a
+  resposta e responde Bom, 1–4 respondem, Z desfaz, E edita, @ suspende. O navegador busca, filtra
+  por estado e permite suspender, esquecer (voltar a novo) e apagar; as estatísticas mostram jovens
+  e maduros e a previsão de revisões. Ao criar, dá para gerar também o cartão invertido. O servidor
+  recalcula cada resposta a partir do cartão gravado. **Importar** baixa um modelo CSV
+  ([`lib/flashcard-csv.ts`](lib/flashcard-csv.ts)) com uma linha por tópico do edital.
 
 As matérias, os tópicos do edital e as aulas **não** estão no banco: são dados estáticos em
 [`lib/subjects.ts`](lib/subjects.ts) e [`lib/lessons.ts`](lib/lessons.ts), versionados junto

@@ -122,6 +122,9 @@ export interface Settings {
   mockDay: number;
   /** Meta de acerto nos simulados, `subjectId` → % (1–100). Matéria sem meta fica de fora. */
   mockTargets: Record<string, number>;
+  /** Flashcards: cartões novos e revisões por dia, no máximo (limites do Anki). */
+  flashcardNewPerDay: number;
+  flashcardReviewsPerDay: number;
 }
 
 /** `subjectId` → quantidade de aulas já distribuídas (acumulado entre voltas). */
@@ -195,6 +198,9 @@ export interface MockExam {
   results: Record<string, MockResult>;
 }
 
+/** Estado do cartão no agendador (lib/flashcards.ts), como no Anki. */
+export type FlashcardState = "new" | "learning" | "review" | "relearning";
+
 /** Um flashcard e o agendamento da repetição espaçada (lib/flashcards.ts). */
 export interface Flashcard {
   id: string;
@@ -203,12 +209,24 @@ export interface Flashcard {
   topicIndex: number | null;
   front: string;
   back: string;
-  /** Quando volta para revisão, `yyyy-mm-dd`. */
+  state: FlashcardState;
+  /** Etapa atual do aprendizado (índice em LEARN_STEPS ou RELEARN_STEPS). */
+  step: number;
+  /** Hora em que volta, nas etapas em minutos (ISO); `null` em revisão e novo. */
+  dueAt: string | null;
+  /** Dia em que volta para revisão, `yyyy-mm-dd`. */
   dueOn: string;
   intervalDays: number;
   ease: number;
+  /** Respostas dadas no total. */
   reps: number;
+  /** Erros em revisão (lapsos). */
   lapses: number;
+  /** Fora das sessões até ser reativado (à mão ou por virar sanguessuga). */
+  suspended: boolean;
+  /** Dia em que foi estudado pela primeira vez (conta no limite de novos). */
+  introducedOn: string | null;
+  lastReviewedOn: string | null;
 }
 
 /** Um período de estudo cronometrado (ou lançado à mão). */

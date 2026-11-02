@@ -9,6 +9,10 @@ import {
   addStudySessionAction,
   advanceBlockAction,
   deleteFlashcardAction,
+  forgetFlashcardAction,
+  restoreFlashcardAction,
+  setFlashcardSuspendedAction,
+  updateFlashcardLimitsAction,
   deleteMockExamAction,
   deleteQuestionsAction,
   deleteStudySessionAction,
@@ -32,7 +36,12 @@ import {
   type ExamOutlook,
 } from "@/lib/cycle";
 import { fromIsoDate, isoWeekday } from "@/lib/date";
-import { reviewFlashcard as scheduleReview, type FlashcardGrade } from "@/lib/flashcards";
+import {
+  forgetFlashcard as resetCard,
+  newCardFields,
+  reviewFlashcard as scheduleReview,
+  type FlashcardGrade,
+} from "@/lib/flashcards";
 import { lessonLinkKey } from "@/lib/lesson-links";
 import { pendingMock as calcPendingMock } from "@/lib/mock-exams";
 import {
@@ -154,6 +163,12 @@ export interface StudyCycle {
   /** Resposta de uma revisão: o cartão é reagendado na hora e o servidor confirma. */
   reviewFlashcard: (id: string, grade: FlashcardGrade) => void;
   deleteFlashcard: (id: string) => void;
+  setFlashcardSuspended: (id: string, suspended: boolean) => void;
+  /** Volta o cartão a "novo". */
+  forgetFlashcard: (id: string) => void;
+  /** Desfaz a última resposta: volta o cartão ao estado anterior. */
+  restoreFlashcard: (previous: Flashcard) => void;
+  setFlashcardLimits: (newPerDay: number, reviewsPerDay: number) => void;
   /** Cria de uma vez os cartões lidos de uma planilha. */
   importFlashcards: (cards: { subjectId: string; topicIndex: number | null; front: string; back: string }[]) => void;
 }
@@ -594,11 +609,8 @@ export function useStudyCycle(
         topicIndex,
         front: front.trim(),
         back: back.trim(),
+        ...newCardFields(),
         dueOn: todayDate,
-        intervalDays: 0,
-        ease: 2.5,
-        reps: 0,
-        lapses: 0,
       };
       mutate(
         (s) => ({ ...s, flashcards: [...s.flashcards, optimistic] }),
@@ -618,11 +630,8 @@ export function useStudyCycle(
         topicIndex: c.topicIndex,
         front: c.front.trim(),
         back: c.back.trim(),
+        ...newCardFields(),
         dueOn: todayDate,
-        intervalDays: 0,
-        ease: 2.5,
-        reps: 0,
-        lapses: 0,
       }));
       const added = new Set(optimistic);
       mutate(
@@ -666,10 +675,79 @@ export function useStudyCycle(
     (id: string, grade: FlashcardGrade) =>
       replaceFlashcard(
         id,
-        (card) => scheduleReview(card, grade, todayDate),
+        (card) => scheduleReview(card, grade, todayDate, Date.now()),
         () => reviewFlashcardAction(id, grade),
       ),
     [replaceFlashcard, todayDate],
+  );
+
+  const setFlashcardSuspended = useCallback(
+    (id: string, suspended: boolean) =>
+      replaceFlashcard(
+        id,
+        (card) => ({ ...card, suspended }),
+        () => setFlashcardSuspendedAction(id, suspended),
+      ),
+    [replaceFlashcard],
+  );
+
+  const forgetFlashcard = useCallback(
+    (id: string) =>
+      replaceFlashcard(
+        id,
+        (card) => resetCard(card, todayDate),
+        () => forgetFlashcardAction(id),
+      ),
+    [replaceFlashcard, todayDate],
+  );
+
+  const restoreFlashcard = useCallback(
+    (previous: Flashcard) => {
+      const { id } = previous;
+      // Só o agendamento volta; o texto fica como está.
+      const schedule = {
+        state: previous.state,
+        step: previous.step,
+        dueAt: previous.dueAt,
+        dueOn: previous.dueOn,
+        intervalDays: previous.intervalDays,
+        ease: previous.ease,
+        reps: previous.reps,
+        lapses: previous.lapses,
+        suspended: previous.suspended,
+        introducedOn: previous.introducedOn,
+        lastReviewedOn: previous.lastReviewedOn,
+      };
+      replaceFlashcard(
+        id,
+        (card) => ({ ...card, ...schedule }),
+        () => restoreFlashcardAction(id, schedule),
+      );
+    },
+    [replaceFlashcard],
+  );
+
+  // Como as metas dos simulados: só os limites vão para o servidor.
+  const setFlashcardLimits = useCallback(
+    (newPerDay: number, reviewsPerDay: number) => {
+      const previous = stateRef.current.settings;
+      mutate(
+        (s) => ({
+          ...s,
+          settings: { ...s.settings, flashcardNewPerDay: newPerDay, flashcardReviewsPerDay: reviewsPerDay },
+        }),
+        (s) => ({
+          ...s,
+          settings: {
+            ...s.settings,
+            flashcardNewPerDay: previous.flashcardNewPerDay,
+            flashcardReviewsPerDay: previous.flashcardReviewsPerDay,
+          },
+        }),
+        () => updateFlashcardLimitsAction(newPerDay, reviewsPerDay),
+      );
+    },
+    [mutate],
   );
 
   const deleteFlashcard = useCallback(
@@ -808,6 +886,10 @@ export function useStudyCycle(
     updateFlashcard,
     reviewFlashcard,
     deleteFlashcard,
+    setFlashcardSuspended,
+    forgetFlashcard,
+    restoreFlashcard,
+    setFlashcardLimits,
     importFlashcards,
   };
 }
