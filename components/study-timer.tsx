@@ -14,12 +14,14 @@ export interface TimerState {
   startedAt: number | null;
   /** Milissegundos contados antes da última pausa. */
   elapsed: number;
+  /** O que está sendo estudado sem aula, ex. "Revisão". */
+  label?: string | null;
 }
 
 export interface StudyTimerApi {
   active: TimerState | null;
   /** Liga o cronômetro numa aula (ou na matéria, sem aula). Com outro ligado, não faz nada. */
-  start: (subjectId: string, lessonIndex: number | null) => void;
+  start: (subjectId: string, lessonIndex: number | null, label?: string) => void;
 }
 
 function isTimerState(value: unknown): value is TimerState {
@@ -30,7 +32,8 @@ function isTimerState(value: unknown): value is TimerState {
     !!findSubject(v.subjectId) &&
     (v.lessonIndex === null || Number.isInteger(v.lessonIndex)) &&
     (v.startedAt === null || typeof v.startedAt === "number") &&
-    typeof v.elapsed === "number"
+    typeof v.elapsed === "number" &&
+    (v.label === undefined || v.label === null || typeof v.label === "string")
   );
 }
 
@@ -69,9 +72,9 @@ export function useStudyTimerState(storageKey: string) {
   );
 
   const start = useCallback(
-    (subjectId: string, lessonIndex: number | null) => {
+    (subjectId: string, lessonIndex: number | null, label?: string) => {
       if (active) return;
-      update({ subjectId, lessonIndex, startedAt: Date.now(), elapsed: 0 });
+      update({ subjectId, lessonIndex, label: label ?? null, startedAt: Date.now(), elapsed: 0 });
     },
     [active, update],
   );
@@ -110,9 +113,10 @@ function useNow(running: boolean): number {
 }
 
 /** Matéria e "Brasil Colônia · aula 2 de 9" (ou nada, no estudo livre). */
-function timerLabel(subjectId: string, lessonIndex: number | null) {
+function timerLabel(subjectId: string, lessonIndex: number | null, label?: string | null) {
   const subject = findSubject(subjectId);
   if (!subject) return { subject: subjectId, lesson: null };
+  if (label) return { subject: subject.name, lesson: label };
   const lesson = lessonIndex !== null ? subject.lessons[lessonIndex] : undefined;
   if (!lesson || lessonIndex === null) return { subject: subject.name, lesson: null };
   const position = lessonPosition(subject, lessonIndex);
@@ -122,13 +126,20 @@ function timerLabel(subjectId: string, lessonIndex: number | null) {
 
 interface TimerButtonProps {
   subjectId: string;
-  lessonIndex: number;
+  /** Aula do bloco de teoria; `null` num bloco sem aula (revisão). */
+  lessonIndex: number | null;
+  /** Nome do que é cronometrado sem aula, ex. "Revisão". */
+  label?: string;
 }
 
-/** Selo nos blocos: liga o cronômetro naquela aula, ou mostra que ele está correndo nela. */
-export function TimerButton({ subjectId, lessonIndex }: TimerButtonProps) {
+/** Selo nos blocos: liga o cronômetro naquele bloco, ou mostra que ele está correndo nele. */
+export function TimerButton({ subjectId, lessonIndex, label }: TimerButtonProps) {
   const { active, start } = useStudyTimer();
-  const here = active !== null && active.subjectId === subjectId && active.lessonIndex === lessonIndex;
+  const here =
+    active !== null &&
+    active.subjectId === subjectId &&
+    active.lessonIndex === lessonIndex &&
+    (active.label ?? null) === (label ?? null);
   const now = useNow(here && active.startedAt !== null);
 
   if (here) {
@@ -143,9 +154,9 @@ export function TimerButton({ subjectId, lessonIndex }: TimerButtonProps) {
   return (
     <button
       type="button"
-      onClick={() => start(subjectId, lessonIndex)}
+      onClick={() => start(subjectId, lessonIndex, label)}
       disabled={active !== null}
-      title={active ? "Pare o cronômetro que está ligado antes" : "Cronometrar o estudo desta aula"}
+      title={active ? "Pare o cronômetro que está ligado antes" : "Cronometrar o estudo deste bloco"}
       className="border-line text-muted hover:border-accent-text/50 hover:text-ink flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40"
     >
       <Timer size={12} aria-hidden />
@@ -174,7 +185,7 @@ export function TimerBar({ active, update, onSave }: TimerBarProps) {
 
   if (!active) return null;
   const ms = elapsedMs(active, now);
-  const { subject, lesson } = timerLabel(active.subjectId, active.lessonIndex);
+  const { subject, lesson } = timerLabel(active.subjectId, active.lessonIndex, active.label);
 
   const pause = () => update({ ...active, startedAt: null, elapsed: ms });
   const resume = () => {

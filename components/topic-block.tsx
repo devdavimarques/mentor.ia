@@ -263,6 +263,7 @@ export function ReviewBlockCard({ block, todayDate, onToggle }: ReviewBlockCardP
             </Tag>
           ))}
           {block.early && <Tag tone="accent">adiantada</Tag>}
+          {!block.done && <TimerButton subjectId={subject.id} lessonIndex={null} label="Revisão" />}
           {late > 0 && (
             <span className="text-accent-text font-semibold">
               atrasada {late} dia{late > 1 ? "s" : ""}
