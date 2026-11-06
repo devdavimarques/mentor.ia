@@ -21,6 +21,12 @@
   --on-accent: #ffffff;
   --success: #34d399;
   --danger: #f47a6b;
+  /* Tipos de bloco no dia: teoria no azul da marca, revisão em roxo, para não
+     se confundir com o verde de "feito". */
+  --theory: #7a9bff;
+  --theory-soft: rgb(23 71 224 / 0.18);
+  --review: #c4b5fd;
+  --review-soft: rgb(139 92 246 / 0.2);
   --hero: #0a1a4f;
   --glow-a: rgb(23 71 224 / 0.38);
   --glow-b: rgb(59 164 255 / 0.18);
@@ -43,6 +49,10 @@
     --on-accent: #ffffff;
     --success: #0e9f6e;
     --danger: #c2412f;
+    --theory: #1747e0;
+    --theory-soft: #e7edff;
+    --review: #6d28d9;
+    --review-soft: #f1eaff;
     --glow-a: rgb(23 71 224 / 0.16);
     --glow-b: rgb(59 164 255 / 0.12);
   }
@@ -63,6 +73,10 @@
   --color-on-accent: var(--on-accent);
   --color-success: var(--success);
   --color-danger: var(--danger);
+  --color-theory: var(--theory);
+  --color-theory-soft: var(--theory-soft);
+  --color-review: var(--review);
+  --color-review-soft: var(--review-soft);
   --color-hero: var(--hero);
 
   /* Variáveis criadas pelo next/font em app/layout.tsx. */

@@ -37,6 +37,8 @@ Regras que sustentam a identidade:
 | `accent-soft` | azul 16% | `#E7EDFF` | Fundo de selos, ícones e avisos informativos |
 | `on-accent` | `#FFFFFF` | `#FFFFFF` | Texto sobre `accent` |
 | `success` | `#34D399` | `#0E9F6E` | Check de tópico concluído |
+| `theory` / `theory-soft` | `#7A9BFF` | `#1747E0` | Selo e faixa "Teoria" nos blocos do dia |
+| `review` / `review-soft` | `#C4B5FD` | `#6D28D9` | Selo e faixa "Revisão" nos blocos do dia (roxo, para não confundir com o verde de feito) |
 | `danger` | `#F47A6B` | `#C2412F` | Erros de salvamento |
 | `hero` | `#0A1A4F` | `#0A1A4F` | Painel de destaque da tela de entrar |
 

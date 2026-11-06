@@ -76,6 +76,13 @@ function StudyCard({
         checked ? "border-success/40" : "border-line hover:border-accent-text/50"
       }`}
     >
+      {/* Faixa na lateral: a cor do tipo de bloco (teoria ou revisão). */}
+      {kind && (
+        <span
+          aria-hidden
+          className={`absolute inset-y-3 left-0 w-1 rounded-r-full ${kind === "Revisão" ? "bg-review" : "bg-theory"}`}
+        />
+      )}
       <div className="flex w-full items-start gap-3 p-4">
         {/* O `before` invisível aumenta a área de toque sem mudar o tamanho do quadrado. */}
         <button
@@ -102,8 +109,8 @@ function StudyCard({
         <div className="min-w-0 flex-1">
           {kind && (
             <span
-              className={`mb-1 block text-[0.68rem] font-bold tracking-wider uppercase ${
-                kind === "Revisão" ? "text-success" : "text-accent-text"
+              className={`mb-1.5 inline-block rounded-md px-1.5 py-0.5 text-[0.68rem] font-bold tracking-wider uppercase ${
+                kind === "Revisão" ? "bg-review-soft text-review" : "bg-theory-soft text-theory"
               }`}
             >
               {kind}
