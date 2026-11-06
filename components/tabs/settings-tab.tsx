@@ -5,7 +5,15 @@ import { Minus, Plus, RotateCcw } from "lucide-react";
 import { getSubjectIcon } from "@/components/subject-icon";
 import { Chip } from "@/components/ui/chip";
 import {
-  BLOCKS_PER_DAY_OPTIONS,
+  BLOCK_MINUTES_OPTIONS,
+  formatHours,
+  MAX_STUDY_MINUTES,
+  MIN_STUDY_MINUTES,
+  reviewBlocks,
+  STUDY_STEP_MINUTES,
+  theoryBlocks,
+} from "@/lib/day-plan";
+import {
   DAY_LABELS,
   DAY_LABELS_FULL,
   DEFAULT_WEIGHTS,
@@ -19,7 +27,7 @@ interface SettingsTabProps {
   settings: Settings;
   todayDate: string;
   onToggleDay: (day: number) => void;
-  onSetBlocksPerDay: (blocks: number) => void;
+  onSetDayPlan: (plan: { studyMinutes: number; theoryMinutes: number; blockMinutes: number }) => void;
   onSetWeight: (subjectId: string, weight: number) => void;
   onResetWeights: () => void;
   onSetExamDate: (date: string | null) => void;
@@ -37,7 +45,7 @@ export function SettingsTab({
   settings,
   todayDate,
   onToggleDay,
-  onSetBlocksPerDay,
+  onSetDayPlan,
   onSetWeight,
   onResetWeights,
   onSetExamDate,
@@ -69,21 +77,7 @@ export function SettingsTab({
           </div>
         </fieldset>
 
-        <fieldset>
-          <legend className="mb-3 text-sm font-bold">Blocos de estudo por dia (1h cada)</legend>
-          <div className="flex gap-2">
-            {BLOCKS_PER_DAY_OPTIONS.map((n) => (
-              <Chip
-                key={n}
-                active={settings.blocksPerDay === n}
-                onClick={() => onSetBlocksPerDay(n)}
-                label={`${n} bloco${n > 1 ? "s" : ""} por dia`}
-              >
-                {n}h
-              </Chip>
-            ))}
-          </div>
-        </fieldset>
+        <DayPlan settings={settings} onChange={onSetDayPlan} />
 
         <p className="bg-accent-soft text-ink flex items-start gap-2.5 rounded-xl p-4 text-sm">
           <RotateCcw size={16} className="text-accent-text mt-0.5 shrink-0" aria-hidden />
@@ -275,5 +269,103 @@ function WeightRow({ subject, weight, perWeek, onChange }: WeightRowProps) {
         </button>
       </div>
     </div>
+  );
+}
+
+const steps = (from: number, to: number) =>
+  Array.from({ length: Math.floor((to - from) / STUDY_STEP_MINUTES) + 1 }, (_, i) => from + i * STUDY_STEP_MINUTES);
+
+const selectClass =
+  "bg-surface border-line focus:border-accent-text rounded-xl border px-3 py-2 text-sm tabular-nums outline-none";
+
+interface DayPlanProps {
+  settings: Settings;
+  onChange: (plan: { studyMinutes: number; theoryMinutes: number; blockMinutes: number }) => void;
+}
+
+/**
+ * Horas do dia: o total, quanto vai para teoria (o resto é revisão) e a
+ * duração do bloco. Mostra quantos blocos de cada tipo cabem.
+ */
+function DayPlan({ settings, onChange }: DayPlanProps) {
+  const { studyMinutes, theoryMinutes, blockMinutes } = settings;
+  const change = (next: Partial<{ studyMinutes: number; theoryMinutes: number; blockMinutes: number }>) => {
+    const plan = { studyMinutes, theoryMinutes, blockMinutes, ...next };
+    // Diminuir o total não pode deixar a teoria maior que o dia.
+    plan.theoryMinutes = Math.min(plan.theoryMinutes, plan.studyMinutes);
+    onChange(plan);
+  };
+  const theory = theoryBlocks(settings);
+  const review = reviewBlocks(settings);
+  const reviewMinutes = studyMinutes - theoryMinutes;
+
+  return (
+    <fieldset className="flex flex-col gap-3">
+      <legend className="mb-1 text-sm font-bold">Horas de estudo por dia</legend>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-muted text-xs font-medium">Total por dia</span>
+          <select
+            value={studyMinutes}
+            onChange={(e) => change({ studyMinutes: Number(e.target.value) })}
+            className={selectClass}
+          >
+            {steps(MIN_STUDY_MINUTES, MAX_STUDY_MINUTES).map((m) => (
+              <option key={m} value={m}>
+                {formatHours(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-muted text-xs font-medium">Teoria</span>
+          <select
+            value={theoryMinutes}
+            onChange={(e) => change({ theoryMinutes: Number(e.target.value) })}
+            className={selectClass}
+          >
+            {/* O valor atual entra mesmo fora dos passos de 30 min (ex.: plano antigo). */}
+            {[...new Set([...steps(STUDY_STEP_MINUTES, studyMinutes), theoryMinutes])]
+              .sort((a, b) => a - b)
+              .map((m) => (
+                <option key={m} value={m}>
+                  {formatHours(m)}
+                </option>
+              ))}
+          </select>
+        </label>
+        <div className="flex flex-col gap-1">
+          <span className="text-muted text-xs font-medium">Revisão (o resto)</span>
+          <span className="bg-surface-alt rounded-xl px-3 py-2 text-sm font-semibold tabular-nums">
+            {reviewMinutes > 0 ? formatHours(reviewMinutes) : "—"}
+          </span>
+        </div>
+      </div>
+
+      <div>
+        <span className="text-muted mb-1.5 block text-xs font-medium">Duração do bloco</span>
+        <div className="flex flex-wrap gap-2">
+          {BLOCK_MINUTES_OPTIONS.map((m) => (
+            <Chip
+              key={m}
+              active={blockMinutes === m}
+              onClick={() => change({ blockMinutes: m })}
+              label={`Blocos de ${formatHours(m)}`}
+            >
+              {formatHours(m)}
+            </Chip>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-muted text-sm tabular-nums">
+        Por dia: <strong className="text-ink">{theory} bloco{theory > 1 ? "s" : ""} de teoria</strong> (aulas do ciclo) e{" "}
+        <strong className="text-ink">
+          {review} de revisão
+        </strong>{" "}
+        (uma matéria por bloco, sempre diferente das matérias da teoria do dia).{" "}
+        {settings.activeDays.length * theory} aulas por semana.
+      </p>
+    </fieldset>
   );
 }

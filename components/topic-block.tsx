@@ -11,6 +11,7 @@ import { TimerButton } from "@/components/study-timer";
 import { HotTag, Tag } from "@/components/ui/tag";
 import { lessonLinkKey } from "@/lib/lesson-links";
 import { topicQuestionStats } from "@/lib/questions";
+import { daysBetween, REVIEW_INTERVALS, type ReviewBlock } from "@/lib/reviews";
 import { sequenceIndex } from "@/lib/schedule";
 import { findSubject, lessonPosition, topicCode } from "@/lib/subjects";
 import type { ScheduledBlock, Subject } from "@/lib/types";
@@ -28,6 +29,8 @@ interface StudyCardProps {
   tags?: React.ReactNode;
   /** Não pode ser marcado ainda: o motivo, ex. "faça antes: Brasil Colônia · aula 1 de 9". */
   lockedReason?: string | null;
+  /** Tipo do bloco no dia, escrito acima do cartão: "Teoria" ou "Revisão". */
+  kind?: "Teoria" | "Revisão";
 }
 
 /**
@@ -45,6 +48,7 @@ function StudyCard({
   onToggle,
   tags,
   lockedReason = null,
+  kind,
 }: StudyCardProps) {
   // Desmarcar continua livre; só marcar fica travado.
   const locked = !checked && lockedReason !== null;
@@ -96,6 +100,15 @@ function StudyCard({
         </button>
 
         <div className="min-w-0 flex-1">
+          {kind && (
+            <span
+              className={`mb-1 block text-[0.68rem] font-bold tracking-wider uppercase ${
+                kind === "Revisão" ? "text-success" : "text-accent-text"
+              }`}
+            >
+              {kind}
+            </span>
+          )}
           {/* `pr-*` deixa espaço para o botão de questões, que flutua no canto. */}
           <span className="text-muted mb-1.5 flex min-w-0 items-center gap-2 pr-12 text-xs font-medium @[28rem]:pr-28">
             {shownCodes.map((code) => (
@@ -208,6 +221,52 @@ export function TopicBlock({ subjectId, topicIndex, tags, ...rest }: TopicBlockP
   );
 }
 
+interface ReviewBlockCardProps {
+  block: ReviewBlock;
+  todayDate: string;
+  onToggle: () => void;
+}
+
+/**
+ * Bloco de revisão: uma matéria e os tópicos dela a revisar hoje. Marcar o
+ * bloco marca todas as revisões dele.
+ */
+export function ReviewBlockCard({ block, todayDate, onToggle }: ReviewBlockCardProps) {
+  const subject = findSubject(block.subjectId);
+  if (!subject) return null;
+  const topics = block.items.map((i) => subject.topics[i.topicIndex]);
+  const stages = [...new Set(block.items.map((i) => i.stage))].sort();
+  const oldest = block.items.reduce((min, i) => (i.dueOn < min ? i.dueOn : min), block.items[0].dueOn);
+  const late = block.done || block.early ? 0 : daysBetween(oldest, todayDate);
+
+  return (
+    <StudyCard
+      kind="Revisão"
+      subjectId={subject.id}
+      topicIndexes={block.items.map((i) => i.topicIndex)}
+      title={topics.length === 1 ? topics[0] : `${topics.length} tópicos de ${subject.name}`}
+      detail={topics.length === 1 ? undefined : topics.join(" · ")}
+      checked={block.done}
+      onToggle={onToggle}
+      tags={
+        <>
+          {stages.map((stage) => (
+            <Tag key={stage}>
+              {stage}ª revisão ({REVIEW_INTERVALS[stage]} dias)
+            </Tag>
+          ))}
+          {block.early && <Tag tone="accent">adiantada</Tag>}
+          {late > 0 && (
+            <span className="text-accent-text font-semibold">
+              atrasada {late} dia{late > 1 ? "s" : ""}
+            </span>
+          )}
+        </>
+      }
+    />
+  );
+}
+
 /** "Relevo Brasileiro" e "Relevo brasileiro." contam como o mesmo texto. */
 function sameText(a: string, b: string): boolean {
   const norm = (s: string) => s.toLocaleLowerCase("pt-BR").replace(/[^\p{L}\p{N}]+/gu, "");
@@ -220,10 +279,11 @@ interface LessonBlockProps {
   onToggle: () => void;
   /** Selos de contexto, antes dos da aula (ex.: atraso). */
   tags?: React.ReactNode;
+  kind?: "Teoria";
 }
 
 /** Cartão de um bloco do ciclo: uma aula do curso, com o item do edital que ela cobre. */
-export function LessonBlock({ block, checked, onToggle, tags }: LessonBlockProps) {
+export function LessonBlock({ block, checked, onToggle, tags, kind }: LessonBlockProps) {
   const nextLessons = useNextLessons();
   const { links } = useLessonLinks();
   const subject = findSubject(block.subjectId);
@@ -250,6 +310,7 @@ export function LessonBlock({ block, checked, onToggle, tags }: LessonBlockProps
       checked={checked}
       onToggle={onToggle}
       lockedReason={lockedReason}
+      kind={kind}
       tags={
         <>
           {tags}

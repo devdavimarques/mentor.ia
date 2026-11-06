@@ -1,5 +1,5 @@
+import { BLOCK_MINUTES_OPTIONS, MAX_STUDY_MINUTES, normalizeDayPlan } from "./day-plan";
 import {
-  BLOCKS_PER_DAY_OPTIONS,
   DEFAULT_SETTINGS,
   findSubject,
   MAX_WEIGHT,
@@ -91,15 +91,24 @@ export function parseSettings(value: unknown): Settings {
       ].sort((a, b) => a - b)
     : [...DEFAULT_SETTINGS.activeDays];
 
-  const blocksPerDay = BLOCKS_PER_DAY_OPTIONS.includes(
-    value.blocksPerDay as (typeof BLOCKS_PER_DAY_OPTIONS)[number],
-  )
-    ? (value.blocksPerDay as number)
-    : DEFAULT_SETTINGS.blocksPerDay;
+  // Antes das horas, o dia era só "N blocos de 1h": vira N horas de teoria e
+  // mais 1h de revisão, e o cronograma de teoria continua o mesmo.
+  const legacyBlocks =
+    Number.isInteger(value.blocksPerDay) && (value.blocksPerDay as number) >= 1 && (value.blocksPerDay as number) <= 12
+      ? (value.blocksPerDay as number)
+      : DEFAULT_SETTINGS.blocksPerDay;
+  const blockMinutes = (BLOCK_MINUTES_OPTIONS as readonly number[]).includes(value.blockMinutes as number)
+    ? (value.blockMinutes as number)
+    : 60;
+  const theoryMinutes = intIn(value.theoryMinutes, 1, MAX_STUDY_MINUTES) ?? legacyBlocks * blockMinutes;
+  const studyMinutes = intIn(value.studyMinutes, 1, MAX_STUDY_MINUTES) ?? theoryMinutes + 60;
 
-  return {
+  return normalizeDayPlan({
     activeDays,
-    blocksPerDay,
+    blocksPerDay: legacyBlocks,
+    studyMinutes,
+    theoryMinutes,
+    blockMinutes,
     weights: parseWeights(value.weights),
     weightBase: parsePointers(value.weightBase, { allowNegative: true }),
     examDate: isIsoDate(value.examDate) ? value.examDate : null,
@@ -113,7 +122,7 @@ export function parseSettings(value: unknown): Settings {
     mockTargets: parseMockTargets(value.mockTargets),
     flashcardNewPerDay: intIn(value.flashcardNewPerDay, 0, 200) ?? DEFAULT_SETTINGS.flashcardNewPerDay,
     flashcardReviewsPerDay: intIn(value.flashcardReviewsPerDay, 1, 2000) ?? DEFAULT_SETTINGS.flashcardReviewsPerDay,
-  };
+  });
 }
 
 function intIn(value: unknown, min: number, max: number): number | null {

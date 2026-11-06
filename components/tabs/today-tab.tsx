@@ -13,19 +13,19 @@ import {
 import { useState } from "react";
 
 import { MockExamForm } from "@/components/mock-exam-form";
-import { LessonBlock, TopicBlock } from "@/components/topic-block";
+import { LessonBlock, ReviewBlockCard } from "@/components/topic-block";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatPanel } from "@/components/ui/stat-panel";
-import { Tag } from "@/components/ui/tag";
 import type { MockExamDetails } from "@/hooks/use-study-cycle";
 import type { CycleEnd, ExamOutlook } from "@/lib/cycle";
 import type { Streak } from "@/lib/streak";
 import { formatLongDate, formatShortDate, fromIsoDate } from "@/lib/date";
 import { blockKey, overallProgress, type StudiedMap } from "@/lib/progress";
-import { daysBetween, type ReviewItem } from "@/lib/reviews";
+import { formatHours, reviewBlocks as plannedReviewBlocks } from "@/lib/day-plan";
+import type { ReviewBlock } from "@/lib/reviews";
 import { formatMinutes } from "@/lib/study-time";
 import { DAY_LABELS_FULL, SUBJECTS } from "@/lib/subjects";
-import type { MockExam, MockResult, ScheduledBlock, WeekSchedule } from "@/lib/types";
+import type { MockExam, MockResult, ScheduledBlock, Settings, WeekSchedule } from "@/lib/types";
 
 interface TodayTabProps {
   today: Date;
@@ -35,7 +35,8 @@ interface TodayTabProps {
   week: WeekSchedule | null;
   studied: StudiedMap;
   checked: ReadonlySet<string>;
-  reviews: ReviewItem[];
+  reviewBlocks: ReviewBlock[];
+  settings: Settings;
   cycleEnd: CycleEnd | null;
   examOutlook: ExamOutlook | null;
   streak: Streak;
@@ -44,7 +45,7 @@ interface TodayTabProps {
   /** Hoje é dia de simulado: sem blocos do ciclo, com a opção de adiantar. */
   isMockDay: boolean;
   onToggleBlock: (block: ScheduledBlock) => void;
-  onToggleReview: (item: ReviewItem) => void;
+  onToggleReviewBlock: (block: ReviewBlock) => void;
   mockExams: readonly MockExam[];
   onAddMockExam: (results: Record<string, MockResult>, details: MockExamDetails) => void;
   onAdvanceBlock: () => void;
@@ -63,14 +64,15 @@ export function TodayTab({
   week,
   studied,
   checked,
-  reviews,
+  reviewBlocks,
+  settings,
   cycleEnd,
   examOutlook,
   streak,
   pendingMock,
   isMockDay,
   onToggleBlock,
-  onToggleReview,
+  onToggleReviewBlock,
   mockExams,
   onAddMockExam,
   onAdvanceBlock,
@@ -80,9 +82,11 @@ export function TodayTab({
 }: TodayTabProps) {
   const edital = overallProgress(studied, SUBJECTS);
   const isChecked = (block: ScheduledBlock) => !!week && checked.has(blockKey(week.weekStart, block));
-  const dayDone = blocks.filter(isChecked).length;
-  const dayPct = blocks.length > 0 ? Math.round((dayDone / blocks.length) * 100) : 0;
-  const reviewsDone = reviews.filter((r) => r.doneOn).length;
+  // O dia junta teoria e revisão: o progresso conta os dois.
+  const dayTotal = blocks.length + reviewBlocks.length;
+  const dayDone = blocks.filter(isChecked).length + reviewBlocks.filter((b) => b.done).length;
+  const dayPct = dayTotal > 0 ? Math.round((dayDone / dayTotal) * 100) : 0;
+  const missingReviews = plannedReviewBlocks(settings) - reviewBlocks.length;
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
@@ -100,31 +104,51 @@ export function TodayTab({
           <p className="text-accent-text text-xs font-semibold tracking-wider uppercase">
             {DAY_LABELS_FULL[todayIso - 1]} · {formatLongDate(today)}
           </p>
-          <h1 className="mt-1 mb-5 text-3xl font-extrabold tracking-tight">
+          <h1 className="mt-1 text-3xl font-extrabold tracking-tight">
             {isMockDay
               ? "Dia de simulado"
-              : blocks.length === 0
+              : dayTotal === 0
                 ? "Dia livre"
-                : `${blocks.length} bloco${blocks.length > 1 ? "s" : ""} para hoje`}
+                : `${dayTotal} bloco${dayTotal > 1 ? "s" : ""} para hoje`}
           </h1>
+          <p className="text-muted mt-1 mb-5 text-sm tabular-nums">
+            {blocks.length} de teoria · {reviewBlocks.length} de revisão · {formatHours(settings.studyMinutes)} no dia
+            (blocos de {formatHours(settings.blockMinutes)})
+          </p>
 
-          {blocks.length === 0 ? (
+          {dayTotal === 0 ? (
             <div className="border-line text-muted rounded-2xl border border-dashed p-6 text-center text-sm">
               {isMockDay
                 ? "Hoje o ciclo não tem blocos: o dia é do simulado. Se quiser estudar também, adiante blocos da fila."
-                : "Sem blocos programados hoje no seu ciclo. Descanse, revise ou adiante a semana."}
+                : "Sem blocos programados hoje no seu ciclo. Descanse ou adiante a semana."}
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
               {blocks.map((block) => (
                 <LessonBlock
                   key={`${block.subjectId}:${block.lessonIndex}:${block.lap}`}
+                  kind="Teoria"
                   block={block}
                   checked={isChecked(block)}
                   onToggle={() => onToggleBlock(block)}
                 />
               ))}
+              {reviewBlocks.map((block) => (
+                <ReviewBlockCard
+                  key={`revisao:${block.subjectId}`}
+                  block={block}
+                  todayDate={todayDate}
+                  onToggle={() => onToggleReviewBlock(block)}
+                />
+              ))}
             </div>
+          )}
+          {missingReviews > 0 && (
+            <p className="text-muted mt-3 text-xs">
+              {reviewBlocks.length === 0 ? "Nenhuma revisão hoje" : `Só ${reviewBlocks.length} bloco${reviewBlocks.length > 1 ? "s" : ""} de revisão hoje`}
+              : não há revisões pendentes em matérias fora da teoria do dia. Cada tópico estudado é
+              revisado 2, 7, 14 e 21 dias depois.
+            </p>
           )}
 
           {isMockDay && (
@@ -136,38 +160,6 @@ export function TodayTab({
               <FastForward size={15} aria-hidden />
               {blocks.length === 0 ? "Adiantar um bloco" : "Adiantar mais um bloco"}
             </button>
-          )}
-        </section>
-
-        <section aria-labelledby="revisoes-hoje">
-          <div className="mb-3 flex items-baseline justify-between gap-3">
-            <h2 id="revisoes-hoje" className="text-xl font-bold tracking-tight">
-              Revisões
-            </h2>
-            {reviews.length > 0 && (
-              <span className="text-muted text-xs font-medium tabular-nums">
-                {reviewsDone} de {reviews.length} feitas
-              </span>
-            )}
-          </div>
-
-          {reviews.length === 0 ? (
-            <div className="border-line text-muted rounded-2xl border border-dashed p-5 text-center text-sm">
-              Nenhuma revisão para hoje. Cada tópico estudado volta em 1, 7 e 30 dias.
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2.5">
-              {reviews.map((item) => (
-                <TopicBlock
-                  key={`${item.subjectId}:${item.topicIndex}:${item.stage}`}
-                  subjectId={item.subjectId}
-                  topicIndex={item.topicIndex}
-                  checked={item.doneOn !== null}
-                  onToggle={() => onToggleReview(item)}
-                  tags={<ReviewTags item={item} todayDate={todayDate} />}
-                />
-              ))}
-            </div>
           )}
         </section>
 
@@ -194,11 +186,11 @@ export function TodayTab({
         <StatPanel
           icon={CalendarCheck}
           label="Hoje"
-          value={blocks.length > 0 ? `${dayPct}%` : "—"}
+          value={dayTotal > 0 ? `${dayPct}%` : "—"}
         >
-          <ProgressBar value={dayPct} label="Blocos de hoje estudados" />
+          <ProgressBar value={dayPct} label="Blocos de hoje feitos" />
           <p className="text-muted mt-2 text-xs tabular-nums">
-            {blocks.length > 0 ? `${dayDone} de ${blocks.length} blocos` : "Dia livre"}
+            {dayTotal > 0 ? `${dayDone} de ${dayTotal} blocos` : "Dia livre"}
             {minutesToday > 0 && ` · ${formatMinutes(minutesToday)} estudados`}
           </p>
         </StatPanel>
@@ -262,22 +254,6 @@ export function TodayTab({
   );
 }
 
-function ReviewTags({ item, todayDate }: { item: ReviewItem; todayDate: string }) {
-  const late = item.doneOn ? 0 : daysBetween(item.dueOn, todayDate);
-  return (
-    <>
-      <Tag>{item.stage}ª revisão</Tag>
-      {item.reinforced && <Tag tone="accent">reforço</Tag>}
-      <span>estudado em {formatShortDate(fromIsoDate(item.studiedOn))}</span>
-      {late > 0 && (
-        <span className="text-accent-text font-semibold">
-          atrasada {late} dia{late > 1 ? "s" : ""}
-        </span>
-      )}
-    </>
-  );
-}
-
 /** "em 3 semanas" / "em 5 dias": folga ou atraso arredondado para leitura. */
 function formatSpan(days: number): string {
   const abs = Math.abs(days);
@@ -303,10 +279,10 @@ function ExamOutlookText({ outlook }: { outlook: ExamOutlook | null }) {
         ? "O ciclo não termina antes da prova."
         : `O ciclo termina ${formatSpan(outlook.marginDays)} depois.`;
     const fix = outlook.suggestion
-      ? ` Com ${outlook.suggestion.blocksPerDay} blocos por dia, termina em ${formatShortDate(
+      ? ` Com ${outlook.suggestion.blocksPerDay} blocos de teoria por dia, termina em ${formatShortDate(
           fromIsoDate(outlook.suggestion.end),
         )}.`
-      : " Nem com 4 blocos por dia fecha: acrescente dias de estudo em Configurar.";
+      : " Nem com 8 blocos de teoria por dia fecha: acrescente dias ou horas de estudo em Configurar.";
     return `Em ${exam}. ${late}${fix}`;
   })();
 

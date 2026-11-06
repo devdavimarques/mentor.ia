@@ -17,12 +17,11 @@ import {
   deleteQuestionsAction,
   deleteStudySessionAction,
   importFlashcardsAction,
-  markReviewAction,
   reviewFlashcardAction,
   setLessonLinkAction,
+  setReviewsDoneAction,
   setTopicStudiedAction,
   toggleBlockAction,
-  unmarkReviewAction,
   updateExamDateAction,
   updateFlashcardAction,
   updateMockTargetsAction,
@@ -60,7 +59,8 @@ import {
   weakTopicKeys,
   type TopicAccuracy,
 } from "@/lib/questions";
-import { reviewsForDay, type ReviewItem } from "@/lib/reviews";
+import { reviewBlocks as calcReviewBlocks, normalizeDayPlan } from "@/lib/day-plan";
+import { reviewBlocksForDay, reviewItems, type ReviewBlock } from "@/lib/reviews";
 import {
   advanceBlock,
   mockDayOfWeek,
@@ -110,7 +110,8 @@ export interface StudyCycle {
   /** Blocos marcados, pela `blockKey`. */
   checked: ReadonlySet<string>;
   /** Revisões vencidas e as feitas hoje. */
-  reviews: ReviewItem[];
+  /** Blocos de revisão do dia (uma matéria cada, nunca uma com teoria hoje). */
+  reviewBlocks: ReviewBlock[];
   /** Blocos atrasados ainda sem fazer, e os atrasados feitos hoje (para desfazer). */
   overdue: OverdueBlock[];
   /** Próxima aula de cada matéria (posição na sequência): só ela pode ser marcada. */
@@ -131,11 +132,13 @@ export interface StudyCycle {
   /** `weekStart` só para atrasados de outra semana; o padrão é a semana atual. */
   toggleBlock: (block: ScheduledBlock, weekStart?: string) => void;
   toggleTopicStudied: (subjectId: string, topicIndex: number) => void;
-  toggleReview: (item: ReviewItem) => void;
+  /** Marca ou desmarca todas as revisões de um bloco. */
+  toggleReviewBlock: (block: ReviewBlock) => void;
+  /** Horas do dia: total, teoria e duração do bloco. Regeram a semana. */
+  setDayPlan: (plan: { studyMinutes: number; theoryMinutes: number; blockMinutes: number }) => void;
   addQuestions: (subjectId: string, topicIndex: number, answered: number, correct: number) => void;
   deleteQuestions: (id: string) => void;
   toggleDay: (day: number) => void;
-  setBlocksPerDay: (blocks: number) => void;
   /** Troca o peso de uma matéria (0 tira do ciclo). */
   setWeight: (subjectId: string, weight: number) => void;
   /** Volta todos os pesos ao padrão. */
@@ -313,35 +316,34 @@ export function useStudyCycle(
     [mutate, todayDate],
   );
 
-  const toggleReview = useCallback(
-    (item: ReviewItem) => {
-      const { subjectId, topicIndex, stage } = item;
+  const toggleReviewBlock = useCallback(
+    (block: ReviewBlock) => {
+      const entries = block.items.map(({ subjectId, topicIndex, stage }) => ({ subjectId, topicIndex, stage }));
 
-      if (item.doneOn) {
-        const doneOn = item.doneOn;
-        const isThisReview = (log: ReviewLog) =>
-          log.subjectId === subjectId &&
-          log.topicIndex === topicIndex &&
-          log.stage === stage &&
-          log.doneOn === doneOn;
-        const existing: ReviewLog = { subjectId, topicIndex, stage, doneOn };
-
+      if (block.done) {
+        const isInBlock = (log: ReviewLog) =>
+          log.doneOn === todayDate &&
+          entries.some(
+            (e) => e.subjectId === log.subjectId && e.topicIndex === log.topicIndex && e.stage === log.stage,
+          );
+        const removed = stateRef.current.reviewLogs.filter(isInBlock);
         mutate(
-          (s) => ({ ...s, reviewLogs: s.reviewLogs.filter((l) => !isThisReview(l)) }),
-          (s) => ({ ...s, reviewLogs: [...s.reviewLogs, existing] }),
-          () => unmarkReviewAction(subjectId, topicIndex, stage, doneOn),
+          (s) => ({ ...s, reviewLogs: s.reviewLogs.filter((l) => !isInBlock(l)) }),
+          (s) => ({ ...s, reviewLogs: [...s.reviewLogs, ...removed] }),
+          () => setReviewsDoneAction(entries, false),
         );
         return;
       }
 
-      const optimistic: ReviewLog = { subjectId, topicIndex, stage, doneOn: todayDate };
+      const optimistic: ReviewLog[] = entries.map((e) => ({ ...e, doneOn: todayDate }));
+      const added = new Set(optimistic);
       mutate(
-        (s) => ({ ...s, reviewLogs: [...s.reviewLogs, optimistic] }),
-        (s) => ({ ...s, reviewLogs: s.reviewLogs.filter((l) => l !== optimistic) }),
-        () => markReviewAction(subjectId, topicIndex, stage),
+        (s) => ({ ...s, reviewLogs: [...s.reviewLogs, ...optimistic] }),
+        (s) => ({ ...s, reviewLogs: s.reviewLogs.filter((l) => !added.has(l)) }),
+        () => setReviewsDoneAction(entries, true),
         (s, savedOn) => ({
           ...s,
-          reviewLogs: s.reviewLogs.map((l) => (l === optimistic ? { ...l, doneOn: savedOn } : l)),
+          reviewLogs: s.reviewLogs.map((l) => (added.has(l) ? { ...l, doneOn: savedOn } : l)),
         }),
       );
     },
@@ -434,8 +436,9 @@ export function useStudyCycle(
     [applySettings],
   );
 
-  const setBlocksPerDay = useCallback(
-    (blocksPerDay: number) => applySettings((settings) => ({ ...settings, blocksPerDay })),
+  const setDayPlan = useCallback(
+    (plan: { studyMinutes: number; theoryMinutes: number; blockMinutes: number }) =>
+      applySettings((settings) => normalizeDayPlan({ ...settings, ...plan })),
     [applySettings],
   );
 
@@ -784,9 +787,17 @@ export function useStudyCycle(
 
   const topicAccuracy = useMemo(() => topicsByAccuracy(state.questionLogs), [state.questionLogs]);
 
-  const reviews = useMemo(
-    () => reviewsForDay(studied, state.reviewLogs, todayDate, weakTopicKeys(topicAccuracy)),
-    [studied, state.reviewLogs, todayDate, topicAccuracy],
+  // A revisão do dia nunca cai numa matéria que tem teoria hoje.
+  const reviewBlocks = useMemo(
+    () =>
+      reviewBlocksForDay(
+        reviewItems(studied, state.reviewLogs, todayDate),
+        todayDate,
+        calcReviewBlocks(state.settings),
+        new Set(todayBlocks.map((b) => b.subjectId)),
+        weakTopicKeys(topicAccuracy),
+      ),
+    [studied, state.reviewLogs, state.settings, todayDate, todayBlocks, topicAccuracy],
   );
 
   // Atrasados marcados hoje continuam na lista, para dar para desfazer.
@@ -851,7 +862,7 @@ export function useStudyCycle(
     lessons,
     manual,
     checked,
-    reviews,
+    reviewBlocks,
     overdue,
     nextLessons,
     cycleEnd,
@@ -864,11 +875,11 @@ export function useStudyCycle(
     dismissError,
     toggleBlock,
     toggleTopicStudied,
-    toggleReview,
+    toggleReviewBlock,
+    setDayPlan,
     addQuestions,
     deleteQuestions,
     toggleDay,
-    setBlocksPerDay,
     setWeight,
     resetWeights,
     setExamDate,

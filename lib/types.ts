@@ -101,7 +101,14 @@ export interface WeekSchedule {
 export interface Settings {
   /** Dias ISO ativos (1–7). */
   activeDays: number[];
+  /** Blocos de teoria (aulas) por dia. Sai das horas (lib/day-plan.ts); não se edita direto. */
   blocksPerDay: number;
+  /** Horas de estudo por dia, em minutos: teoria + revisão. */
+  studyMinutes: number;
+  /** Parte do dia para teoria; o resto é revisão. */
+  theoryMinutes: number;
+  /** Duração de um bloco (de teoria ou de revisão). */
+  blockMinutes: number;
   /** `subjectId` → peso escolhido (0–10). Sempre completo; 0 tira a matéria do ciclo. */
   weights: Record<string, number>;
   /**
@@ -160,8 +167,8 @@ export interface BlockRef {
   lap: number;
 }
 
-/** 1ª, 2ª ou 3ª revisão de um tópico. */
-export type ReviewStage = 1 | 2 | 3;
+/** 1ª a 4ª revisão de um tópico (2, 7, 14 e 21 dias depois do estudo). */
+export type ReviewStage = 1 | 2 | 3 | 4;
 
 export interface ReviewLog {
   subjectId: string;

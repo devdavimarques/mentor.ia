@@ -52,7 +52,7 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     lessons,
     manual,
     checked,
-    reviews,
+    reviewBlocks,
     overdue,
     nextLessons,
     cycleEnd,
@@ -65,11 +65,11 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     dismissError,
     toggleBlock,
     toggleTopicStudied,
-    toggleReview,
+    toggleReviewBlock,
     addQuestions,
     deleteQuestions,
     toggleDay,
-    setBlocksPerDay,
+    setDayPlan,
     setWeight,
     resetWeights,
     setExamDate,
@@ -174,14 +174,15 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
               week={state.week}
               studied={studied}
               checked={checked}
-              reviews={reviews}
+              reviewBlocks={reviewBlocks}
+              settings={state.settings}
               cycleEnd={cycleEnd}
               examOutlook={examOutlook}
               streak={streak}
               pendingMock={pendingMock}
               isMockDay={isMockDay}
               onToggleBlock={toggleBlock}
-              onToggleReview={toggleReview}
+              onToggleReviewBlock={toggleReviewBlock}
               mockExams={state.mockExams}
               onAddMockExam={addMockExam}
               onAdvanceBlock={advanceOneBlock}
@@ -272,7 +273,7 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
               settings={state.settings}
               todayDate={todayDate}
               onToggleDay={toggleDay}
-              onSetBlocksPerDay={setBlocksPerDay}
+              onSetDayPlan={setDayPlan}
               onSetWeight={setWeight}
               onResetWeights={resetWeights}
               onSetExamDate={setExamDate}

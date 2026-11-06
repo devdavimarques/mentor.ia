@@ -162,7 +162,7 @@ function WeakTopics({ ranked }: { ranked: readonly TopicAccuracy[] }) {
       </h2>
       <p className="text-muted mb-3 text-sm">
         Os {WEAK_TOPICS_SHOWN} piores acertos (com {MIN_QUESTIONS_FOR_ACCURACY}+ questões). Abaixo
-        de {WEAK_ACCURACY_PCT}%, as revisões do tópico vêm mais cedo: 1, 3 e 14 dias.
+        de {WEAK_ACCURACY_PCT}%, a matéria do tópico tem prioridade nos blocos de revisão.
       </p>
 
       {shown.length === 0 ? (

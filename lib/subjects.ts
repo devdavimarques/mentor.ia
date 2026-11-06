@@ -379,7 +379,8 @@ export const DAY_LABELS_FULL = [
   "Domingo",
 ] as const;
 
-export const BLOCKS_PER_DAY_OPTIONS = [1, 2, 3, 4] as const;
+/** Blocos de teoria por dia testados na sugestão de prazo da prova (lib/cycle.ts). */
+export const BLOCKS_PER_DAY_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 
 /** Maior peso que uma matéria pode ter. */
 export const MAX_WEIGHT = 10;
@@ -395,6 +396,9 @@ export const MOCK_EVERY_WEEKS_OPTIONS = [0, 1, 2, 4] as const;
 export const DEFAULT_SETTINGS: Settings = {
   activeDays: [1, 2, 3, 4, 5, 6],
   blocksPerDay: 3,
+  studyMinutes: 4 * 60,
+  theoryMinutes: 3 * 60,
+  blockMinutes: 60,
   weights: { ...DEFAULT_WEIGHTS },
   weightBase: {},
   examDate: null,

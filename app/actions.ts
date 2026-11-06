@@ -196,44 +196,41 @@ export async function setTopicStudiedAction(
   }
 }
 
-/** Marca uma revisão como feita hoje. Devolve a data gravada. */
-export async function markReviewAction(
-  subjectId: string,
-  topicIndex: number,
-  stage: ReviewStage,
-): Promise<ActionResult<string>> {
+/** Revisões num bloco, no máximo (bem acima dos tópicos de qualquer matéria). */
+const MAX_REVIEWS_PER_BLOCK = 60;
+
+/**
+ * Marca (ou desmarca) um bloco de revisão: todas as revisões dele como feitas
+ * hoje. Desmarcar só apaga as de hoje. Devolve a data gravada.
+ */
+export async function setReviewsDoneAction(rawEntries: unknown, done: unknown): Promise<ActionResult<string>> {
   try {
     const profile = await currentProfile();
     if (!profile) return { ok: false, error: SESSION_EXPIRED };
-    if (!isKnownTopic(subjectId, topicIndex)) return { ok: false, error: UNKNOWN_TOPIC };
-    if (!isReviewStage(stage)) return { ok: false, error: "Revisão inválida." };
-
-    const doneOn = todayIsoDate();
-    await markReviewDone(profile.id, subjectId, topicIndex, stage, doneOn);
-    return { ok: true, data: doneOn };
-  } catch (error) {
-    return fail("markReview", error);
-  }
-}
-
-export async function unmarkReviewAction(
-  subjectId: string,
-  topicIndex: number,
-  stage: ReviewStage,
-  doneOn: string,
-): Promise<ActionResult> {
-  try {
-    const profile = await currentProfile();
-    if (!profile) return { ok: false, error: SESSION_EXPIRED };
-    if (!isKnownTopic(subjectId, topicIndex)) return { ok: false, error: UNKNOWN_TOPIC };
-    if (!isReviewStage(stage) || !isIsoDate(doneOn)) {
+    if (typeof done !== "boolean" || !Array.isArray(rawEntries) || rawEntries.length === 0) {
       return { ok: false, error: "Revisão inválida." };
     }
+    if (rawEntries.length > MAX_REVIEWS_PER_BLOCK) return { ok: false, error: "Revisões demais num bloco." };
 
-    await unmarkReview(profile.id, subjectId, topicIndex, stage, doneOn);
-    return { ok: true, data: null };
+    const entries: { subjectId: string; topicIndex: number; stage: ReviewStage }[] = [];
+    for (const raw of rawEntries) {
+      if (!isRecord(raw) || !isKnownTopic(raw.subjectId, raw.topicIndex) || !isReviewStage(raw.stage)) {
+        return { ok: false, error: "Revisão inválida." };
+      }
+      entries.push({ subjectId: raw.subjectId as string, topicIndex: raw.topicIndex as number, stage: raw.stage });
+    }
+
+    const doneOn = todayIsoDate();
+    await Promise.all(
+      entries.map((e) =>
+        done
+          ? markReviewDone(profile.id, e.subjectId, e.topicIndex, e.stage, doneOn)
+          : unmarkReview(profile.id, e.subjectId, e.topicIndex, e.stage, doneOn),
+      ),
+    );
+    return { ok: true, data: doneOn };
   } catch (error) {
-    return fail("unmarkReview", error);
+    return fail("setReviewsDone", error);
   }
 }
 

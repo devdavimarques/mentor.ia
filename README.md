@@ -30,7 +30,7 @@ npm install
    [`supabase/migrations/`](supabase/migrations/): `0001_init.sql`,
    `0002_study_logs_reviews_questions.sql`, `0003_lessons.sql`, `0004_profile_passwords.sql`,
    `0005_mock_exams.sql`, `0006_flashcards.sql`, `0007_study_time_links_scores.sql` e
-   `0008_flashcards_anki.sql`
+   `0008_flashcards_anki.sql` e `0009_review_stage_4.sql`
 3. Vá em **Settings → API** e copie `Project URL` e a chave `service_role`
 
 ### 3. Configurar as variáveis de ambiente
@@ -141,16 +141,24 @@ flashcards      profile_id, subject_id,        Flashcards e o agendamento da
   contador na própria aba): veja [Fila por matéria](#fila-por-matéria).
 - **Progresso** = tópicos estudados. Um tópico fica estudado quando **todas as aulas dele**
   foram feitas, ou quando é marcado à mão na aba Matérias (estudo por fora).
-- **Revisões** vencem 1, 7 e 30 dias depois de o tópico ficar estudado e aparecem na aba Hoje
-  até serem feitas (atrasadas ficam marcadas). Uma revisão nunca vence no mesmo dia da
-  anterior. Nada disso é agenda gravada: é calculado em [`lib/reviews.ts`](lib/reviews.ts) a
-  partir dos estudos e revisões feitas, então desmarcar uma aula recalcula tudo.
+- **Horas do dia** ([`lib/day-plan.ts`](lib/day-plan.ts)): em Configurar, o total de horas por
+  dia, quanto disso é teoria (o resto é revisão) e a duração do bloco. Ex.: 4h, 2h30 de teoria e
+  blocos de 50 min dão 3 blocos de teoria (aulas do ciclo, `blocksPerDay`) e 2 de revisão.
+  Configurações antigas ("N blocos de 1h") viram N horas de teoria + 1h de revisão.
+- **Revisões** ([`lib/reviews.ts`](lib/reviews.ts)): cada tópico estudado é revisado 2, 7, 14 e 21
+  dias depois. No dia elas vêm em **blocos**, um por matéria, juntando os tópicos dela a revisar;
+  marcar o bloco marca todas. A matéria de um bloco de revisão **nunca** é uma das que têm
+  teoria no dia: a revisão vencida dessas espera, e o bloco puxa a de outra matéria (a mais
+  atrasada primeiro; sem nada vencido, adianta a que vence mais cedo, com o selo "adiantada").
+  A aba Hoje mostra teoria e revisão no mesmo quadro, cada cartão com o título "Teoria" ou
+  "Revisão". Nada disso é agenda gravada: é calculado a partir dos estudos e revisões feitas,
+  então desmarcar uma aula recalcula tudo.
 - **Questões** são lançadas pelo botão de cada tópico (feitas / certas) e viram % de acerto por
-  tópico, por matéria e no total. Não entram no progresso, mas guiam as revisões: tópico com
-  **acerto abaixo de 60%** (com 5+ questões) revisa em **1, 3 e 14 dias** em vez de 1, 7 e 30,
-  com o selo "reforço". A aba Progresso lista os 5 piores acertos em "Tópicos para reforçar".
+  tópico, por matéria e no total. Não entram no progresso, mas guiam as revisões: matéria com
+  tópico de **acerto abaixo de 60%** (com 5+ questões) tem prioridade nos blocos de revisão. A
+  aba Progresso lista os 5 piores acertos em "Tópicos para reforçar".
 - **Prova:** com a data definida em Configurar, a aba Hoje mostra quantos dias faltam e compara
-  com a previsão de fim do ciclo. Se não fecha, testa 4 blocos por dia com a mesma função que
+  com a previsão de fim do ciclo. Se não fecha, testa até 8 blocos de teoria por dia com a mesma função que
   regera a semana (`examOutlook`, em [`lib/cycle.ts`](lib/cycle.ts)) e diz com quantos fecha.
 - **Simulados:** toda semana, a cada 2 ou a cada 4 semanas (ou desligado), no dia da semana
   escolhido em Configurar. Nas semanas de simulado esse dia **fica sem blocos** (`generateWeek` distribui as
@@ -241,7 +249,8 @@ lib/
   schedule.ts         Geração do ciclo (déficit acumulado + espalhamento), atrasos e replanejamento
   cycle.ts            Previsão de fim do ciclo + manutenção do dia (virada e replanejamento)
   progress.ts         Tópicos vistos, blocos marcados e percentuais
-  reviews.ts          Revisões espaçadas (1, 7 e 30 dias)
+  reviews.ts          Revisões espaçadas (2, 7, 14 e 21 dias) em blocos por matéria
+  day-plan.ts         Horas do dia: blocos de teoria e de revisão
   questions.ts        Estatísticas, validação das questões e tópicos de pior acerto
   mock-exams.ts       Simulados: quando cai, validação, pontos e evolução por matéria
   study-time.ts       Cronômetro: validação e tempo por matéria
