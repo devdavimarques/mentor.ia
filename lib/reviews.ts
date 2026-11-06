@@ -6,7 +6,8 @@ import type { ReviewLog, ReviewStage } from "./types";
 /**
  * Revisões espaçadas: o mesmo tópico é revisado 2, 7, 14 e 21 dias depois de
  * ficar estudado — quando a última aula dele é feita, ou quando ele é marcado
- * à mão.
+ * à mão. Feita a de 21 dias, o ciclo recomeça a partir dela (2, 7, 14, 21…),
+ * sem fim.
  *
  * No dia, a revisão vem em **blocos**, como a teoria: cada bloco é de uma
  * matéria e junta os tópicos dela a revisar. A matéria de um bloco de revisão
@@ -20,6 +21,8 @@ import type { ReviewLog, ReviewStage } from "./types";
 export const REVIEW_INTERVALS: Readonly<Record<ReviewStage, number>> = { 1: 2, 2: 7, 3: 14, 4: 21 };
 
 export const REVIEW_STAGES: readonly ReviewStage[] = [1, 2, 3, 4];
+/** Trava de segurança do laço de ciclos (cada um leva no mínimo 21 dias). */
+const MAX_REVIEW_CYCLES = 100;
 
 export function isReviewStage(value: unknown): value is ReviewStage {
   return value === 1 || value === 2 || value === 3 || value === 4;
@@ -48,7 +51,7 @@ export function daysBetween(from: string, to: string): number {
 
 /**
  * Para cada tópico estudado: a próxima revisão pendente (vencida ou não) e as
- * revisões feitas hoje. Tópico com as quatro revisões feitas não aparece.
+ * revisões feitas hoje. Depois da 4ª revisão, a próxima é a 1ª do ciclo seguinte.
  */
 export function reviewItems(studied: StudiedMap, reviewLogs: readonly ReviewLog[], today: string): ReviewItem[] {
   const doneByTopic = new Map<string, ReviewLog[]>();
@@ -67,27 +70,45 @@ export function reviewItems(studied: StudiedMap, reviewLogs: readonly ReviewLog[
       if (!studiedOn) return;
 
       // Revisões anteriores ao último estudo pertencem a uma sequência antiga.
-      const done = (doneByTopic.get(key) ?? []).filter((log) => log.doneOn >= studiedOn);
-      const doneOnByStage = new Map(done.map((log) => [log.stage, log.doneOn]));
-      const base = { subjectId: subject.id, topicIndex, studiedOn };
+      const done = (doneByTopic.get(key) ?? [])
+        .filter((log) => log.doneOn >= studiedOn)
+        .sort((a, b) => (a.doneOn < b.doneOn ? -1 : a.doneOn > b.doneOn ? 1 : 0));
 
+      // Feita a de 21 dias, o ciclo recomeça: 2, 7, 14 e 21 dias contados do
+      // dia dessa revisão, e assim por diante.
+      let cycleStart = studiedOn;
       let previousDone = studiedOn;
-      for (const stage of REVIEW_STAGES) {
-        // Uma revisão nunca vence no mesmo dia da anterior: se uma atrasou,
-        // a seguinte espera pelo menos até o dia seguinte.
-        const scheduled = shiftIso(studiedOn, REVIEW_INTERVALS[stage]);
-        const earliest = shiftIso(previousDone, 1);
-        const dueOn = scheduled > earliest ? scheduled : earliest;
-        const doneOn = doneOnByStage.get(stage);
+      let firstCycle = true;
+      for (let cycle = 0; cycle < MAX_REVIEW_CYCLES; cycle++) {
+        const start = cycleStart;
+        // Revisões deste ciclo: as feitas depois do início dele (no 1º, a partir do estudo).
+        const inCycle = done.filter((log) => (firstCycle ? log.doneOn >= start : log.doneOn > start));
+        const doneOnByStage = new Map<ReviewStage, string>();
+        for (const log of inCycle) if (!doneOnByStage.has(log.stage)) doneOnByStage.set(log.stage, log.doneOn);
+        const base = { subjectId: subject.id, topicIndex, studiedOn: start };
 
-        if (doneOn) {
-          if (doneOn === today) items.push({ ...base, stage, dueOn, doneOn });
-          previousDone = doneOn;
-          continue;
+        let finished = true;
+        for (const stage of REVIEW_STAGES) {
+          // Uma revisão nunca vence no mesmo dia da anterior: se uma atrasou,
+          // a seguinte espera pelo menos até o dia seguinte.
+          const scheduled = shiftIso(start, REVIEW_INTERVALS[stage]);
+          const earliest = shiftIso(previousDone, 1);
+          const dueOn = scheduled > earliest ? scheduled : earliest;
+          const doneOn = doneOnByStage.get(stage);
+
+          if (doneOn) {
+            if (doneOn === today) items.push({ ...base, stage, dueOn, doneOn });
+            previousDone = doneOn;
+            continue;
+          }
+          // Feita hoje a anterior: a próxima só entra a partir de amanhã.
+          if (previousDone !== today) items.push({ ...base, stage, dueOn, doneOn: null });
+          finished = false;
+          break;
         }
-        // Feita hoje a anterior: a próxima só entra a partir de amanhã.
-        if (previousDone !== today) items.push({ ...base, stage, dueOn, doneOn: null });
-        break;
+        if (!finished) break;
+        cycleStart = previousDone;
+        firstCycle = false;
       }
     });
   }

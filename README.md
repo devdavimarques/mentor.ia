@@ -146,7 +146,7 @@ flashcards      profile_id, subject_id,        Flashcards e o agendamento da
   blocos de 50 min dão 3 blocos de teoria (aulas do ciclo, `blocksPerDay`) e 2 de revisão.
   Configurações antigas ("N blocos de 1h") viram N horas de teoria + 1h de revisão.
 - **Revisões** ([`lib/reviews.ts`](lib/reviews.ts)): cada tópico estudado é revisado 2, 7, 14 e 21
-  dias depois. No dia elas vêm em **blocos**, um por matéria, juntando os tópicos dela a revisar;
+  dias depois; feita a de 21 dias, o ciclo recomeça a partir dela (2, 7, 14, 21…). No dia elas vêm em **blocos**, um por matéria, juntando os tópicos dela a revisar;
   marcar o bloco marca todas. A matéria de um bloco de revisão **nunca** é uma das que têm
   teoria no dia: a revisão vencida dessas espera, e o bloco puxa a de outra matéria (a mais
   atrasada primeiro; sem nada vencido, adianta a que vence mais cedo, com o selo "adiantada").
@@ -249,7 +249,7 @@ lib/
   schedule.ts         Geração do ciclo (déficit acumulado + espalhamento), atrasos e replanejamento
   cycle.ts            Previsão de fim do ciclo + manutenção do dia (virada e replanejamento)
   progress.ts         Tópicos vistos, blocos marcados e percentuais
-  reviews.ts          Revisões espaçadas (2, 7, 14 e 21 dias) em blocos por matéria
+  reviews.ts          Revisões espaçadas (ciclos de 2, 7, 14 e 21 dias) em blocos por matéria
   day-plan.ts         Horas do dia: blocos de teoria e de revisão
   questions.ts        Estatísticas, validação das questões e tópicos de pior acerto
   mock-exams.ts       Simulados: quando cai, validação, pontos e evolução por matéria
