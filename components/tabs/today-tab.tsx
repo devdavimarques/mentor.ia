@@ -135,7 +135,7 @@ export function TodayTab({
               ))}
               {reviewBlocks.map((block) => (
                 <ReviewBlockCard
-                  key={`revisao:${block.subjectId}`}
+                  key={`revisao:${block.subjectId}:${block.items[0].topicIndex}:${block.items[0].stage}`}
                   block={block}
                   todayDate={todayDate}
                   onToggle={() => onToggleReviewBlock(block)}
@@ -151,14 +151,15 @@ export function TodayTab({
             </p>
           )}
 
-          {isMockDay && (
+          {/* Adiantar vale todo dia: traz o próximo bloco de teoria da fila para hoje. */}
+          {week && (
             <button
               type="button"
               onClick={onAdvanceBlock}
               className="border-line text-accent-text hover:border-accent-text/50 mt-3 flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors"
             >
               <FastForward size={15} aria-hidden />
-              {blocks.length === 0 ? "Adiantar um bloco" : "Adiantar mais um bloco"}
+              {blocks.length === 0 ? "Adiantar um bloco" : "Adiantar mais um bloco de teoria"}
             </button>
           )}
         </section>

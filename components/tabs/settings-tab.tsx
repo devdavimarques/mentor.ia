@@ -363,7 +363,7 @@ function DayPlan({ settings, onChange }: DayPlanProps) {
         <strong className="text-ink">
           {review} de revisão
         </strong>{" "}
-        (uma matéria por bloco, sempre diferente das matérias da teoria do dia).{" "}
+        (um tópico por bloco, nunca de uma matéria que tem teoria no dia).{" "}
         {settings.activeDays.length * theory} aulas por semana.
       </p>
     </fieldset>

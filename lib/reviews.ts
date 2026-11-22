@@ -9,8 +9,8 @@ import type { ReviewLog, ReviewStage } from "./types";
  * à mão. Feita a de 21 dias, o ciclo recomeça a partir dela (2, 7, 14, 21…),
  * sem fim.
  *
- * No dia, a revisão vem em **blocos**, como a teoria: cada bloco é de uma
- * matéria e junta os tópicos dela a revisar. A matéria de um bloco de revisão
+ * No dia, a revisão vem em **blocos**, como a teoria: cada bloco é a revisão
+ * de um tópico. A matéria de um bloco de revisão
  * nunca é uma das que têm teoria no dia; se a revisão vencida for de uma
  * delas, ela espera, e o bloco puxa a revisão de outra matéria (mesmo que
  * ainda não tenha vencido).
@@ -115,22 +115,24 @@ export function reviewItems(studied: StudiedMap, reviewLogs: readonly ReviewLog[
   return items;
 }
 
+/** Um bloco de revisão: um tópico (a revisão da vez dele). */
 export interface ReviewBlock {
   subjectId: string;
+  /** Sempre uma revisão; em lista para o bloco marcar e desmarcar do mesmo jeito. */
   items: ReviewItem[];
-  /** Feito hoje (todas as revisões do bloco marcadas). */
+  /** Feito hoje. */
   done: boolean;
-  /** Nenhuma revisão do bloco tinha vencido: foi puxada para ocupar o bloco. */
+  /** A revisão ainda não tinha vencido: foi adiantada para ocupar o bloco. */
   early: boolean;
 }
 
-const byDue = (a: ReviewItem, b: ReviewItem) => (a.dueOn < b.dueOn ? -1 : a.dueOn > b.dueOn ? 1 : a.topicIndex - b.topicIndex);
+const byDue = (a: ReviewItem, b: ReviewItem) => (a.dueOn < b.dueOn ? -1 : a.dueOn > b.dueOn ? 1 : 0);
 
 /**
- * Blocos de revisão do dia. Primeiro os já feitos hoje (uma matéria cada).
- * Os que faltam saem das matérias **sem teoria hoje**: primeiro as que têm
- * revisão vencida (a mais atrasada antes; tópico fraco nas questões desempata),
- * depois, se ainda sobrar bloco, as revisões que vencem mais cedo, adiantadas.
+ * Blocos de revisão do dia, **um tópico por bloco**. Primeiro os já feitos
+ * hoje. Os que faltam saem das matérias **sem teoria hoje**: primeiro as
+ * revisões vencidas (a mais atrasada antes; tópico fraco nas questões
+ * desempata), depois, se ainda sobrar bloco, as que vencem mais cedo, adiantadas.
  */
 export function reviewBlocksForDay(
   items: readonly ReviewItem[],
@@ -139,46 +141,19 @@ export function reviewBlocksForDay(
   theorySubjects: ReadonlySet<string>,
   weak: ReadonlySet<string> = new Set(),
 ): ReviewBlock[] {
-  const doneToday = new Map<string, ReviewItem[]>();
-  for (const item of items) {
-    if (item.doneOn === today) doneToday.set(item.subjectId, [...(doneToday.get(item.subjectId) ?? []), item]);
-  }
-  const blocks: ReviewBlock[] = [...doneToday].map(([subjectId, done]) => ({
-    subjectId,
-    items: done.sort(byDue),
-    done: true,
-    early: done.every((i) => i.dueOn > today),
-  }));
+  const blocks: ReviewBlock[] = items
+    .filter((i) => i.doneOn === today)
+    .sort(byDue)
+    .map((i) => ({ subjectId: i.subjectId, items: [i], done: true, early: i.dueOn > today }));
 
-  const pending = new Map<string, ReviewItem[]>();
-  for (const item of items) {
-    if (item.doneOn !== null || theorySubjects.has(item.subjectId) || doneToday.has(item.subjectId)) continue;
-    pending.set(item.subjectId, [...(pending.get(item.subjectId) ?? []), item]);
-  }
+  const isWeak = (i: ReviewItem) => weak.has(topicKey(i.subjectId, i.topicIndex));
+  const pending = items
+    .filter((i) => i.doneOn === null && !theorySubjects.has(i.subjectId))
+    .sort((a, b) => byDue(a, b) || Number(isWeak(b)) - Number(isWeak(a)));
 
-  const candidates = [...pending].map(([subjectId, list]) => {
-    const sorted = list.sort(byDue);
-    const due = sorted.filter((i) => i.dueOn <= today);
-    return {
-      subjectId,
-      due,
-      // Sem nada vencido, o bloco adianta as revisões do próximo dia da matéria.
-      upcoming: sorted.filter((i) => i.dueOn === sorted[0].dueOn),
-      first: sorted[0].dueOn,
-      weak: sorted.some((i) => weak.has(topicKey(i.subjectId, i.topicIndex))),
-    };
-  });
-  candidates.sort(
-    (a, b) =>
-      Number(b.due.length > 0) - Number(a.due.length > 0) ||
-      (a.first < b.first ? -1 : a.first > b.first ? 1 : 0) ||
-      Number(b.weak) - Number(a.weak),
-  );
-
-  for (const c of candidates) {
+  for (const item of pending) {
     if (blocks.length >= count) break;
-    const early = c.due.length === 0;
-    blocks.push({ subjectId: c.subjectId, items: early ? c.upcoming : c.due, done: false, early });
+    blocks.push({ subjectId: item.subjectId, items: [item], done: false, early: item.dueOn > today });
   }
   return blocks;
 }

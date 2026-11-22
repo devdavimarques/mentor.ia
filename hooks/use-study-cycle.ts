@@ -110,7 +110,7 @@ export interface StudyCycle {
   /** Blocos marcados, pela `blockKey`. */
   checked: ReadonlySet<string>;
   /** Revisões vencidas e as feitas hoje. */
-  /** Blocos de revisão do dia (uma matéria cada, nunca uma com teoria hoje). */
+  /** Blocos de revisão do dia (um tópico cada, nunca de matéria com teoria hoje). */
   reviewBlocks: ReviewBlock[];
   /** Blocos atrasados ainda sem fazer, e os atrasados feitos hoje (para desfazer). */
   overdue: OverdueBlock[];

@@ -146,8 +146,7 @@ flashcards      profile_id, subject_id,        Flashcards e o agendamento da
   blocos de 50 min dão 3 blocos de teoria (aulas do ciclo, `blocksPerDay`) e 2 de revisão.
   Configurações antigas ("N blocos de 1h") viram N horas de teoria + 1h de revisão.
 - **Revisões** ([`lib/reviews.ts`](lib/reviews.ts)): cada tópico estudado é revisado 2, 7, 14 e 21
-  dias depois; feita a de 21 dias, o ciclo recomeça a partir dela (2, 7, 14, 21…). No dia elas vêm em **blocos**, um por matéria, juntando os tópicos dela a revisar;
-  marcar o bloco marca todas. A matéria de um bloco de revisão **nunca** é uma das que têm
+  dias depois; feita a de 21 dias, o ciclo recomeça a partir dela (2, 7, 14, 21…). No dia elas vêm em **blocos**, um tópico por bloco. A matéria de um bloco de revisão **nunca** é uma das que têm
   teoria no dia: a revisão vencida dessas espera, e o bloco puxa a de outra matéria (a mais
   atrasada primeiro; sem nada vencido, adianta a que vence mais cedo, com o selo "adiantada").
   A aba Hoje mostra teoria e revisão no mesmo quadro, cada cartão com o título "Teoria" ou
@@ -166,6 +165,8 @@ flashcards      profile_id, subject_id,        Flashcards e o agendamento da
 - **Prova:** com a data definida em Configurar, a aba Hoje mostra quantos dias faltam e compara
   com a previsão de fim do ciclo. Se não fecha, testa até 8 blocos de teoria por dia com a mesma função que
   regera a semana (`examOutlook`, em [`lib/cycle.ts`](lib/cycle.ts)) e diz com quantos fecha.
+- **Adiantar um bloco:** todo dia, abaixo dos blocos de hoje, traz o próximo bloco da fila de
+  teoria para hoje (`advanceBlock`); os seguintes recuam uma posição e o ciclo acaba mais cedo.
 - **Simulados:** toda semana, a cada 2 ou a cada 4 semanas (ou desligado), no dia da semana
   escolhido em Configurar. Nas semanas de simulado esse dia **fica sem blocos** (`generateWeek` distribui as
   aulas nos outros dias), e a aba Hoje lembra de fazer a prova inteira e lançar o acerto por

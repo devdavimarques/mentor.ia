@@ -224,7 +224,7 @@ export function generateWeek(
  * "Adiantar um bloco": traz o próximo bloco da fila para hoje. Os blocos não
  * marcados dos dias seguintes recuam uma posição, o primeiro de `spill` (ou
  * uma aula nova, pelo peso) ocupa o último lugar, e o fim do ciclo chega um
- * bloco mais cedo. Serve ao dia de simulado, que não tem blocos próprios.
+ * bloco mais cedo. Vale todo dia (no de simulado, que não tem blocos, é o jeito de estudar).
  */
 export function advanceBlock(
   cycle: { settings: Settings; pointers: Pointers; week: WeekSchedule },
