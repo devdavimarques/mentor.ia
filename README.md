@@ -160,8 +160,9 @@ flashcards      profile_id, subject_id,        Flashcards e o agendamento da
   da "Planilha de Estudos PMBA (Hub)"): cada tópico tem o link de questões no **QConcursos** (já
   filtrado por banca e assunto) e, quando há, o **material** de apoio no Drive. Aparecem nas aulas
   ("Questões" e "Material", da linha da planilha que corresponde à aula), nos blocos de revisão e
-  nos tópicos da aba Matérias. A meta é de **10 questões por tópico** (`QUESTION_GOAL`): cada aula e
-  cada tópico mostram quantas já foram feitas.
+  nos tópicos da aba Matérias. A meta é **diária**: **10 questões por bloco do dia**, no tópico do bloco (`QUESTION_GOAL`).
+  Cada bloco da aba Hoje mostra quantas foram feitas hoje, e o painel Hoje soma a meta do dia
+  (ex.: 3 blocos = 30). Na aba Matérias aparece o total de questões de cada tópico.
 - **Prova:** com a data definida em Configurar, a aba Hoje mostra quantos dias faltam e compara
   com a previsão de fim do ciclo. Se não fecha, testa até 8 blocos de teoria por dia com a mesma função que
   regera a semana (`examOutlook`, em [`lib/cycle.ts`](lib/cycle.ts)) e diz com quantos fecha.

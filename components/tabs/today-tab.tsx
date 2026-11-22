@@ -13,6 +13,7 @@ import {
 import { useState } from "react";
 
 import { MockExamForm } from "@/components/mock-exam-form";
+import { useQuestions } from "@/components/questions-context";
 import { LessonBlock, ReviewBlockCard } from "@/components/topic-block";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatPanel } from "@/components/ui/stat-panel";
@@ -24,7 +25,8 @@ import { blockKey, overallProgress, type StudiedMap } from "@/lib/progress";
 import { formatHours, reviewBlocks as plannedReviewBlocks } from "@/lib/day-plan";
 import type { ReviewBlock } from "@/lib/reviews";
 import { formatMinutes } from "@/lib/study-time";
-import { DAY_LABELS_FULL, SUBJECTS } from "@/lib/subjects";
+import { QUESTION_GOAL, questionsToday } from "@/lib/questions";
+import { DAY_LABELS_FULL, findSubject, SUBJECTS } from "@/lib/subjects";
 import type { MockExam, MockResult, ScheduledBlock, Settings, WeekSchedule } from "@/lib/types";
 
 interface TodayTabProps {
@@ -87,6 +89,21 @@ export function TodayTab({
   const dayDone = blocks.filter(isChecked).length + reviewBlocks.filter((b) => b.done).length;
   const dayPct = dayTotal > 0 ? Math.round((dayDone / dayTotal) * 100) : 0;
   const missingReviews = plannedReviewBlocks(settings) - reviewBlocks.length;
+
+  // Meta de questões do dia: 10 por bloco, no tópico do bloco (redação não tem questões).
+  const { logs: questionLogs } = useQuestions();
+  const blockTopics = [
+    ...blocks.flatMap((b) => {
+      const lesson = findSubject(b.subjectId)?.lessons[b.lessonIndex];
+      return lesson ? [{ subjectId: b.subjectId, topicIndex: lesson.topics[0] }] : [];
+    }),
+    ...reviewBlocks.map((b) => ({ subjectId: b.subjectId, topicIndex: b.items[0].topicIndex })),
+  ].filter((t) => findSubject(t.subjectId)?.group !== "redacao");
+  const questionGoal = blockTopics.length * QUESTION_GOAL;
+  const questionsDone = blockTopics.reduce(
+    (sum, t) => sum + Math.min(QUESTION_GOAL, questionsToday(questionLogs, t.subjectId, t.topicIndex, todayDate)),
+    0,
+  );
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
@@ -194,6 +211,11 @@ export function TodayTab({
             {dayTotal > 0 ? `${dayDone} de ${dayTotal} blocos` : "Dia livre"}
             {minutesToday > 0 && ` · ${formatMinutes(minutesToday)} estudados`}
           </p>
+          {questionGoal > 0 && (
+            <p className={`mt-1 text-xs tabular-nums ${questionsDone >= questionGoal ? "text-success font-semibold" : "text-muted"}`}>
+              Questões: {questionsDone} de {questionGoal} ({QUESTION_GOAL} por bloco)
+            </p>
+          )}
         </StatPanel>
 
         <StatPanel

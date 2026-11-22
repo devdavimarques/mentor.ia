@@ -3,7 +3,7 @@
 import { Check, FileText, ListChecks } from "lucide-react";
 
 import { useQuestions } from "@/components/questions-context";
-import { QUESTION_GOAL, topicQuestionStats } from "@/lib/questions";
+import { QUESTION_GOAL, questionsToday } from "@/lib/questions";
 import type { TopicResource } from "@/lib/resources";
 
 const linkClass = "text-accent-text hover:text-ink flex items-center gap-1 font-semibold";
@@ -46,21 +46,21 @@ export function ResourceLinks({ resource, label }: { resource: TopicResource; la
   );
 }
 
-/** Quantas questões do tópico já foram feitas, contra a meta de 10. */
+/** Meta do bloco de hoje: questões do tópico lançadas hoje, contra 10. */
 export function QuestionGoal({ subjectId, topicIndex }: { subjectId: string; topicIndex: number }) {
-  const { logs } = useQuestions();
-  const { answered } = topicQuestionStats(logs, subjectId, topicIndex);
+  const { logs, today } = useQuestions();
+  const answered = questionsToday(logs, subjectId, topicIndex, today);
   if (answered >= QUESTION_GOAL) {
     return (
       <span className="text-success flex items-center gap-1 font-semibold tabular-nums">
         <Check size={12} strokeWidth={3} aria-hidden />
-        {answered} questões
+        {answered} questões hoje
       </span>
     );
   }
   return (
-    <span className="tabular-nums" title={`Meta: ${QUESTION_GOAL} questões por tópico`}>
-      {answered}/{QUESTION_GOAL} questões
+    <span className="tabular-nums" title={`Meta do bloco: ${QUESTION_GOAL} questões hoje`}>
+      {answered}/{QUESTION_GOAL} questões hoje
     </span>
   );
 }

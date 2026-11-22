@@ -12,8 +12,22 @@ export const MIN_QUESTIONS_FOR_ACCURACY = 5;
 export const WEAK_ACCURACY_PCT = 60;
 
 /** Prefixo do id provisório de um lançamento que ainda não voltou do banco. */
-/** Meta de questões por tópico (a da planilha de estudos do curso). */
+/**
+ * Meta diária: questões por bloco do dia, no tópico do bloco (o número é o da
+ * planilha de estudos do curso). Zera todo dia.
+ */
 export const QUESTION_GOAL = 10;
+
+/** Questões lançadas hoje num tópico. */
+export function questionsToday(
+  logs: readonly QuestionLog[],
+  subjectId: string,
+  topicIndex: number,
+  today: string,
+): number {
+  return questionStats(logs, (l) => l.subjectId === subjectId && l.topicIndex === topicIndex && l.loggedOn === today)
+    .answered;
+}
 
 export const PENDING_ID_PREFIX = "pendente-";
 

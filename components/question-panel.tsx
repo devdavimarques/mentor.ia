@@ -10,6 +10,7 @@ import {
   PENDING_ID_PREFIX,
   QUESTION_GOAL,
   questionLogError,
+  questionsToday,
   questionStats,
 } from "@/lib/questions";
 
@@ -27,7 +28,7 @@ function toCount(value: string): number {
 }
 
 export function QuestionPanel({ subjectId, topicIndex }: QuestionPanelProps) {
-  const { logs, add, remove } = useQuestions();
+  const { logs, today, add, remove } = useQuestions();
   const [answered, setAnswered] = useState("");
   const [correct, setCorrect] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +36,7 @@ export function QuestionPanel({ subjectId, topicIndex }: QuestionPanelProps) {
 
   const topicLogs = logs.filter((l) => l.subjectId === subjectId && l.topicIndex === topicIndex);
   const stats = questionStats(topicLogs);
+  const done = questionsToday(logs, subjectId, topicIndex, today);
   const history = topicLogs.slice(-HISTORY_SIZE).reverse();
 
   function submit(event: FormEvent) {
@@ -59,10 +61,10 @@ export function QuestionPanel({ subjectId, topicIndex }: QuestionPanelProps) {
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-muted text-xs font-medium tabular-nums">
         {stats.pct === null
-          ? `Nenhuma questão lançada neste tópico. Meta: ${QUESTION_GOAL}.`
-          : `${stats.answered} feitas · ${stats.correct} certas · ${stats.pct}% de acerto · ${
-              stats.answered >= QUESTION_GOAL ? "meta cumprida" : `faltam ${QUESTION_GOAL - stats.answered} para a meta de ${QUESTION_GOAL}`
-            }`}
+          ? "Nenhuma questão lançada neste tópico."
+          : `${stats.answered} feitas · ${stats.correct} certas · ${stats.pct}% de acerto`}
+        {" · "}
+        {done >= QUESTION_GOAL ? `hoje: ${done} (meta de ${QUESTION_GOAL} cumprida)` : `hoje: ${done} de ${QUESTION_GOAL}`}
       </p>
 
       <form onSubmit={submit} className="flex flex-wrap items-end gap-2" noValidate>

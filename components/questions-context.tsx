@@ -6,6 +6,8 @@ import type { QuestionLog } from "@/lib/types";
 
 export interface QuestionsApi {
   logs: readonly QuestionLog[];
+  /** Hoje no fuso do app, para a meta diária. */
+  today: string;
   add: (subjectId: string, topicIndex: number, answered: number, correct: number) => void;
   remove: (id: string) => void;
 }

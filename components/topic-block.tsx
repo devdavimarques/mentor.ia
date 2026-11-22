@@ -276,6 +276,9 @@ export function ReviewBlockCard({ block, todayDate, onToggle }: ReviewBlockCardP
               />
             ) : null;
           })}
+          {subject.group !== "redacao" && (
+            <QuestionGoal subjectId={subject.id} topicIndex={block.items[0].topicIndex} />
+          )}
           {!block.done && <TimerButton subjectId={subject.id} lessonIndex={null} label="Revisão" />}
           {late > 0 && (
             <span className="text-accent-text font-semibold">
@@ -361,7 +364,8 @@ export function LessonBlock({ block, checked, onToggle, tags, kind }: LessonBloc
             </a>
           )}
           {resource && <ResourceLinks resource={resource} />}
-          {subject.group !== "redacao" && (
+          {/* A meta diária é dos blocos de hoje: só aparece na aba Hoje (onde o cartão tem tipo). */}
+          {kind && subject.group !== "redacao" && (
             <QuestionGoal subjectId={subject.id} topicIndex={lesson.topics[0]} />
           )}
           {!checked && <TimerButton subjectId={subject.id} lessonIndex={block.lessonIndex} />}

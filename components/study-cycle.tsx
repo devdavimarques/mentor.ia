@@ -93,8 +93,8 @@ export function StudyCycle({ profile, initialState, todayDate }: StudyCycleProps
   } = useStudyCycle(initialState, todayDate);
 
   const questionsApi = useMemo(
-    () => ({ logs: state.questionLogs, add: addQuestions, remove: deleteQuestions }),
-    [state.questionLogs, addQuestions, deleteQuestions],
+    () => ({ logs: state.questionLogs, today: todayDate, add: addQuestions, remove: deleteQuestions }),
+    [state.questionLogs, todayDate, addQuestions, deleteQuestions],
   );
 
   const linksApi = useMemo(

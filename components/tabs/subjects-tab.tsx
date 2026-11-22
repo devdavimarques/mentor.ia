@@ -4,7 +4,7 @@ import { Check, ChevronDown, Link2, Pencil, PlayCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { useLessonLinks } from "@/components/lesson-links-context";
-import { QuestionGoal, ResourceLinks } from "@/components/resource-links";
+import { ResourceLinks } from "@/components/resource-links";
 import { QuestionPanel } from "@/components/question-panel";
 import { useQuestions } from "@/components/questions-context";
 import { getSubjectIcon } from "@/components/subject-icon";
@@ -150,7 +150,7 @@ function TopicRow({ subject, topicIndex, studiedOn, lessons, manual, onToggle }:
                 {lessons.done}/{lessons.total} aula{lessons.total > 1 ? "s" : ""}
                 {studiedOn && <> · estudado em {formatShortDate(fromIsoDate(studiedOn))}</>}
               </span>
-              {subject.group !== "redacao" && <QuestionGoal subjectId={subject.id} topicIndex={topicIndex} />}
+              {stats.answered > 0 && <span>{stats.answered} questões no total</span>}
             </span>
             <TopicResourceLinks subjectId={subject.id} topicIndex={topicIndex} />
           </span>
