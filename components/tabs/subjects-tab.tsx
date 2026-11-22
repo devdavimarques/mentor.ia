@@ -4,7 +4,7 @@ import { Check, ChevronDown, Link2, Pencil, PlayCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { useLessonLinks } from "@/components/lesson-links-context";
-import { ResourceLinks } from "@/components/resource-links";
+import { DownloadLink, ResourceLinks } from "@/components/resource-links";
 import { QuestionPanel } from "@/components/question-panel";
 import { useQuestions } from "@/components/questions-context";
 import { getSubjectIcon } from "@/components/subject-icon";
@@ -294,6 +294,7 @@ function LessonLinkRow({ subjectId, lessonIndex, title, part }: LessonLinkRowPro
             Abrir
           </a>
         )}
+        {link && !editing && <DownloadLink url={link} label={`Baixar a aula: ${title}`} />}
         {!editing && (
           <button
             type="button"

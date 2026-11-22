@@ -527,10 +527,16 @@ export function regenerateWeek(
 ): { settings: Settings; pointers: Pointers; week: WeekSchedule } {
   const old = previous.week;
   const fromDay = Math.max(1, dayInWeek(old.weekStart, today));
+  // O que já foi marcado hoje fica em hoje: regerar não pode mandar uma aula
+  // feita para outro dia (no dia de simulado, que não tem vaga, ela iria para
+  // a semana seguinte e voltaria como pendente).
+  const doneToday = new Set(
+    (old.days.find((d) => d.day === fromDay)?.blocks ?? []).filter((b) => checked.has(blockKey(old.weekStart, b))),
+  );
   const pool = [
     ...old.days.filter((d) => d.day >= fromDay).flatMap((d) => d.blocks),
     ...old.spill,
-  ];
+  ].filter((b) => !doneToday.has(b));
 
   const base: Pointers = { ...previous.pointers };
   for (const subject of SUBJECTS) {
@@ -555,10 +561,24 @@ export function regenerateWeek(
   const settings: Settings = { ...requested, weightBase };
   const generated = generateWeek(settings, base, old.weekStart, { queued: pool, fromDay });
 
+  // Hoje: as marcadas primeiro, e só cabem novas nas vagas que sobram; o que
+  // não couber vai para a frente da fila (a fila por matéria reordena abaixo).
+  let overflow: ScheduledBlock[] = [];
+  const days = generated.week.days.map((d) => {
+    if (d.day !== fromDay || doneToday.size === 0) return d;
+    const room = Math.max(0, d.blocks.length - doneToday.size);
+    overflow = d.blocks.slice(room);
+    return { ...d, blocks: [...doneToday, ...d.blocks.slice(0, room)] };
+  });
+  if (doneToday.size > 0 && !days.some((d) => d.day === fromDay)) {
+    days.push({ day: fromDay, blocks: [...doneToday] });
+    days.sort((a, b) => a.day - b.day);
+  }
+
   const week: WeekSchedule = {
     ...old,
-    days: [...old.days.filter((d) => d.day < fromDay), ...generated.week.days],
-    spill: generated.week.spill,
+    days: [...old.days.filter((d) => d.day < fromDay), ...days],
+    spill: [...overflow, ...generated.week.spill],
   };
   const relaid = relayoutSubjects({ settings, pointers: generated.pointers, week }, checked, today);
   return { settings: relaid.settings, pointers: relaid.pointers, week: relaid.week };

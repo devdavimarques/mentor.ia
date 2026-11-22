@@ -1,10 +1,10 @@
 "use client";
 
-import { Check, FileText, ListChecks } from "lucide-react";
+import { Check, Download, FileText, ListChecks } from "lucide-react";
 
 import { useQuestions } from "@/components/questions-context";
 import { QUESTION_GOAL, questionsToday } from "@/lib/questions";
-import type { TopicResource } from "@/lib/resources";
+import { downloadUrl, type TopicResource } from "@/lib/resources";
 
 const linkClass = "text-accent-text hover:text-ink flex items-center gap-1 font-semibold";
 
@@ -42,7 +42,20 @@ export function ResourceLinks({ resource, label }: { resource: TopicResource; la
           Material{suffix}
         </a>
       )}
+      {resource.material && <DownloadLink url={resource.material} label={`Baixar material: ${resource.name}`} />}
     </>
+  );
+}
+
+/** "Baixar": o arquivo do Drive direto, sem abrir a página dele. Nada para pasta. */
+export function DownloadLink({ url, label }: { url: string; label: string }) {
+  const href = downloadUrl(url);
+  if (!href) return null;
+  return (
+    <a href={href} rel="noopener noreferrer" title={label} aria-label={label} className={linkClass}>
+      <Download size={13} aria-hidden />
+      Baixar
+    </a>
   );
 }
 

@@ -139,7 +139,8 @@ const EDITAL: readonly Omit<Subject, "lessons">[] = [
     id: "atualidades",
     name: "Atualidades",
     code: "ATU",
-    weight: 5,
+    // Fora do ciclo (peso 0): continua no edital e nos simulados, mas sem aulas no cronograma.
+    weight: 0,
     examQuestions: 8,
     hotTopics: [],
     icon: "newspaper",

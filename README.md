@@ -166,6 +166,9 @@ flashcards      profile_id, subject_id,        Flashcards e o agendamento da
 - **Prova:** com a data definida em Configurar, a aba Hoje mostra quantos dias faltam e compara
   com a previsão de fim do ciclo. Se não fecha, testa até 8 blocos de teoria por dia com a mesma função que
   regera a semana (`examOutlook`, em [`lib/cycle.ts`](lib/cycle.ts)) e diz com quantos fecha.
+- **Baixar:** ao lado de "Material" e de "Abrir aula", baixa o arquivo do Drive direto (`downloadUrl`, em
+  [`lib/resources.ts`](lib/resources.ts)); documento do Google sai em PDF. Pasta não tem download direto.
+- **Atualidades** está fora do ciclo (peso 0): continua no edital e nos simulados, sem aulas no cronograma.
 - **Adiantar um bloco:** todo dia, abaixo dos blocos de hoje, traz o próximo bloco da fila de
   teoria para hoje (`advanceBlock`); os seguintes recuam uma posição e o ciclo acaba mais cedo.
 - **Simulados:** toda semana, a cada 2 ou a cada 4 semanas (ou desligado), no dia da semana
