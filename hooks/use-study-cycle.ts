@@ -191,14 +191,10 @@ function replaceLog(optimistic: StudyLog) {
  *
  * `todayDate` vem do servidor já resolvido no fuso do app, então cliente e
  * servidor nunca discordam sobre que dia é hoje.
- *
- * Com `persist` falso (visitante), as alterações ficam só na tela: nada é
- * enviado, e recarregar a página volta ao ciclo de exemplo.
  */
 export function useStudyCycle(
   initialState: StudyState,
   todayDate: string,
-  persist = true,
 ): StudyCycle {
   const [state, setState] = useState<StudyState>(initialState);
   const [error, setError] = useState<string | null>(null);
@@ -229,7 +225,6 @@ export function useStudyCycle(
     ) => {
       update(apply(stateRef.current));
       setError(null);
-      if (!persist) return;
 
       startTransition(async () => {
         const result = await request();
@@ -241,7 +236,7 @@ export function useStudyCycle(
         if (reconcile) update(reconcile(stateRef.current, result.data));
       });
     },
-    [update, persist],
+    [update],
   );
 
   const toggleBlock = useCallback(
@@ -352,10 +347,9 @@ export function useStudyCycle(
 
   const addQuestions = useCallback(
     (subjectId: string, topicIndex: number, answered: number, correct: number) => {
-      // Visitante nunca recebe id do banco: o lançamento já nasce definitivo
-      // (com prefixo de "pendente" o botão de apagar ficaria desativado).
+      // Id provisório até o banco devolver o definitivo.
       const optimistic: QuestionLog = {
-        id: `${persist ? PENDING_ID_PREFIX : "local-"}${++pendingIds.current}`,
+        id: `${PENDING_ID_PREFIX}${++pendingIds.current}`,
         subjectId,
         topicIndex,
         answered,
@@ -372,7 +366,7 @@ export function useStudyCycle(
         }),
       );
     },
-    [mutate, todayDate, persist],
+    [mutate, todayDate],
   );
 
   const deleteQuestions = useCallback(
@@ -504,7 +498,7 @@ export function useStudyCycle(
     (results: Record<string, MockResult>, details: MockExamDetails) => {
       // Mesmo esquema das questões: id provisório até o banco devolver o definitivo.
       const optimistic: MockExam = {
-        id: `${persist ? PENDING_ID_PREFIX : "local-"}${++pendingIds.current}`,
+        id: `${PENDING_ID_PREFIX}${++pendingIds.current}`,
         ...details,
         results,
       };
@@ -515,7 +509,7 @@ export function useStudyCycle(
         (s, saved) => ({ ...s, mockExams: s.mockExams.map((e) => (e === optimistic ? saved : e)) }),
       );
     },
-    [mutate, persist],
+    [mutate],
   );
 
   // Como a data da prova: só a meta vai para o servidor, o cronograma não muda.
@@ -537,7 +531,7 @@ export function useStudyCycle(
   const addStudySession = useCallback(
     (subjectId: string, lessonIndex: number | null, minutes: number) => {
       const optimistic: StudySession = {
-        id: `${persist ? PENDING_ID_PREFIX : "local-"}${++pendingIds.current}`,
+        id: `${PENDING_ID_PREFIX}${++pendingIds.current}`,
         subjectId,
         lessonIndex,
         minutes,
@@ -550,7 +544,7 @@ export function useStudyCycle(
         (s, saved) => ({ ...s, studySessions: s.studySessions.map((x) => (x === optimistic ? saved : x)) }),
       );
     },
-    [mutate, todayDate, persist],
+    [mutate, todayDate],
   );
 
   const deleteStudySession = useCallback(
@@ -607,7 +601,7 @@ export function useStudyCycle(
     (subjectId: string, topicIndex: number | null, front: string, back: string) => {
       // Mesmo esquema das questões: id provisório até o banco devolver o definitivo.
       const optimistic: Flashcard = {
-        id: `${persist ? PENDING_ID_PREFIX : "local-"}${++pendingIds.current}`,
+        id: `${PENDING_ID_PREFIX}${++pendingIds.current}`,
         subjectId,
         topicIndex,
         front: front.trim(),
@@ -622,13 +616,13 @@ export function useStudyCycle(
         (s, saved) => ({ ...s, flashcards: s.flashcards.map((c) => (c === optimistic ? saved : c)) }),
       );
     },
-    [mutate, todayDate, persist],
+    [mutate, todayDate],
   );
 
   const importFlashcards = useCallback(
     (cards: { subjectId: string; topicIndex: number | null; front: string; back: string }[]) => {
       const optimistic: Flashcard[] = cards.map((c) => ({
-        id: `${persist ? PENDING_ID_PREFIX : "local-"}${++pendingIds.current}`,
+        id: `${PENDING_ID_PREFIX}${++pendingIds.current}`,
         subjectId: c.subjectId,
         topicIndex: c.topicIndex,
         front: c.front.trim(),
@@ -644,7 +638,7 @@ export function useStudyCycle(
         (s, saved) => ({ ...s, flashcards: [...s.flashcards.filter((c) => !added.has(c)), ...saved] }),
       );
     },
-    [mutate, todayDate, persist],
+    [mutate, todayDate],
   );
 
   /** Troca um cartão existente: aplica já, desfaz se falhar, confirma com o que o banco gravou. */

@@ -53,7 +53,7 @@ import {
 } from "@/lib/state-schema";
 import { studySessionError } from "@/lib/study-time";
 import { verifyPassword } from "@/lib/password";
-import { clearSession, isProfileId, writeGuestSession, writeProfileSession } from "@/lib/session";
+import { clearSession, isProfileId, writeProfileSession } from "@/lib/session";
 import { currentProfile } from "@/lib/study-session";
 import type {
   BlockRef,
@@ -70,7 +70,6 @@ export type ActionResult<T = null> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
-/** Também é o que o visitante recebe: `currentProfile()` não devolve perfil para ele. */
 const SESSION_EXPIRED = "Sessão encerrada. Entre no perfil novamente.";
 
 /**
@@ -117,12 +116,6 @@ export async function signInAction(
 
   // Fora do try: `redirect` funciona lançando uma exceção interna do Next,
   // que um catch acima engoliria.
-  redirect("/");
-}
-
-/** Entra como visitante: vê e mexe em tudo, mas nada é gravado. */
-export async function enterAsGuestAction(): Promise<void> {
-  await writeGuestSession();
   redirect("/");
 }
 

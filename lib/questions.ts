@@ -12,6 +12,9 @@ export const MIN_QUESTIONS_FOR_ACCURACY = 5;
 export const WEAK_ACCURACY_PCT = 60;
 
 /** Prefixo do id provisório de um lançamento que ainda não voltou do banco. */
+/** Meta de questões por tópico (a da planilha de estudos do curso). */
+export const QUESTION_GOAL = 10;
+
 export const PENDING_ID_PREFIX = "pendente-";
 
 export interface QuestionStats {

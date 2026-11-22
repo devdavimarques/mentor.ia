@@ -33,11 +33,8 @@ export default async function SignInPage() {
 
             {profiles.length === 0 ? (
               <div className="border-line text-muted mt-6 rounded-2xl border border-dashed p-5 text-sm">
-                <p className="text-ink mb-2 font-semibold">Nenhum perfil cadastrado</p>
-                <p className="mb-3">Crie os perfis rodando, na pasta do projeto:</p>
-                <code className="text-accent-text block font-mono text-xs break-all">
-                  npm run db:seed -- &quot;Nome Um&quot; &quot;Nome Dois&quot;
-                </code>
+                <p className="text-ink mb-2 font-semibold">Nenhum perfil disponível</p>
+                <p>O acesso é liberado pelo administrador.</p>
               </div>
             ) : (
               <>

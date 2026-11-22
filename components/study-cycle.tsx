@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
@@ -31,11 +31,9 @@ interface StudyCycleProps {
   initialState: StudyState;
   /** Hoje no fuso do app, `yyyy-mm-dd`, resolvido no servidor. */
   todayDate: string;
-  /** Visitante: mexe em tudo, mas nada é salvo. */
-  guest?: boolean;
 }
 
-export function StudyCycle({ profile, initialState, todayDate, guest = false }: StudyCycleProps) {
+export function StudyCycle({ profile, initialState, todayDate }: StudyCycleProps) {
   const [tab, setTabState] = useState<TabId>("hoje");
   // No celular a página rola inteira: trocar de aba volta ao topo dela.
   const setTab = (next: TabId) => {
@@ -92,7 +90,7 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
     restoreFlashcard,
     setFlashcardLimits,
     importFlashcards,
-  } = useStudyCycle(initialState, todayDate, !guest);
+  } = useStudyCycle(initialState, todayDate);
 
   const questionsApi = useMemo(
     () => ({ logs: state.questionLogs, add: addQuestions, remove: deleteQuestions }),
@@ -105,7 +103,7 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
   );
 
   // O cronômetro ligado fica guardado no navegador, separado por perfil.
-  const timer = useStudyTimerState(`mentor.ia:cronometro:${guest ? "visitante" : profile.id}`);
+  const timer = useStudyTimerState(`mentor.ia:cronometro:${profile.id}`);
   const timerApi = useMemo(() => ({ active: timer.active, start: timer.start }), [timer.active, timer.start]);
 
   const flashcardsDue = dueTodayCount(state.flashcards, todayDate, state.settings);
@@ -123,21 +121,10 @@ export function StudyCycle({ profile, initialState, todayDate, guest = false }: 
       <StudyTimerProvider value={timerApi}>
       <div className="bg-frame border-line mx-auto min-h-dvh w-full max-w-6xl sm:my-6 sm:min-h-0 sm:rounded-3xl sm:border sm:shadow-2xl sm:shadow-black/20">
         <AppHeader
-          guest={guest}
           profile={profile}
           saving={saving}
           nav={<TabNav active={tab} onChange={setTab} badges={badges} />}
         />
-
-        {guest && (
-        <div className="bg-accent-soft text-ink mx-4 mt-4 flex items-start gap-3 rounded-xl px-4 py-3 text-sm sm:mx-6">
-          <Eye size={16} className="text-accent-text mt-0.5 shrink-0" aria-hidden />
-          <span>
-            <span className="font-semibold">Modo visitante.</span> Explore à vontade: nada do que
-            você fizer é salvo, e ao recarregar a página o ciclo volta ao início.
-          </span>
-        </div>
-      )}
 
       {error && (
           <div

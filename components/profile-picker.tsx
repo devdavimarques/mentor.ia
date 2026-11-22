@@ -1,9 +1,9 @@
 "use client";
 
-import { ChevronRight, Eye, Lock } from "lucide-react";
+import { ChevronRight, Lock } from "lucide-react";
 import { useState, useTransition, type FormEvent } from "react";
 
-import { enterAsGuestAction, signInAction } from "@/app/actions";
+import { signInAction } from "@/app/actions";
 import { Avatar } from "@/components/ui/avatar";
 import type { ProfileOption } from "@/lib/types";
 
@@ -13,7 +13,7 @@ interface ProfilePickerProps {
 
 /**
  * Escolha do perfil: tocar num perfil abre o campo de senha logo abaixo dele.
- * Embaixo, a entrada de visitante, que não pede senha e não salva nada.
+ * Só perfis criados no banco aparecem; não há cadastro nem visitante.
  */
 export function ProfilePicker({ profiles }: ProfilePickerProps) {
   const [pending, startTransition] = useTransition();
@@ -122,25 +122,6 @@ export function ProfilePicker({ profiles }: ProfilePickerProps) {
         </p>
       )}
 
-      <div className="text-muted my-3 flex items-center gap-3 text-xs font-medium before:h-px before:flex-1 before:bg-current/20 after:h-px after:flex-1 after:bg-current/20">
-        ou
-      </div>
-
-      <form action={enterAsGuestAction}>
-        <button
-          type="submit"
-          disabled={pending}
-          className="border-line hover:border-accent-text text-ink flex w-full items-center gap-3 rounded-xl border border-dashed p-3 text-left transition-colors disabled:opacity-60"
-        >
-          <span className="bg-surface-alt text-muted flex size-9 shrink-0 items-center justify-center rounded-full">
-            <Eye size={16} aria-hidden />
-          </span>
-          <span className="flex-1">
-            <span className="block text-[0.95rem] font-semibold">Entrar como visitante</span>
-            <span className="text-muted block text-xs">Para conhecer: nada do que fizer é salvo.</span>
-          </span>
-        </button>
-      </form>
     </div>
   );
 }

@@ -14,13 +14,11 @@ import { env } from "./env";
  * HMAC é derivada da service role key — um segredo que já só existe no
  * servidor — com um rótulo próprio, para não reaproveitar a chave crua.
  *
- * Visitante: um cookie separado que não dá acesso a nada no banco; só faz a
- * página abrir com um ciclo de exemplo que nunca é salvo.
+ * Só entra quem tem perfil com senha no banco: não há cadastro nem visitante.
  */
 const PROFILE_COOKIE = "mentor-ia.sessao";
-const GUEST_COOKIE = "mentor-ia.visitante";
-/** Cookie da versão sem senha: ignorado e apagado ao entrar ou sair. */
-const LEGACY_COOKIE = "mentor-ia.profile";
+/** Cookies de versões antigas (sem senha; modo visitante): ignorados e apagados ao entrar ou sair. */
+const LEGACY_COOKIES = ["mentor-ia.profile", "mentor-ia.visitante"];
 
 const ONE_YEAR_IN_SECONDS = 60 * 60 * 24 * 365;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,7 +35,7 @@ function sign(profileId: string, passwordHash: string): string {
   return createHmac("sha256", signingKey()).update(`${profileId}:${passwordHash}`).digest("base64url");
 }
 
-export type StoredSession = { kind: "profile"; profileId: string; signature: string } | { kind: "guest" };
+export type StoredSession = { profileId: string; signature: string };
 
 /** O que o cookie diz. A assinatura ainda precisa ser conferida com `sessionMatches`. */
 export async function readSession(): Promise<StoredSession | null> {
@@ -45,9 +43,8 @@ export async function readSession(): Promise<StoredSession | null> {
   const raw = jar.get(PROFILE_COOKIE)?.value;
   if (raw) {
     const [profileId, signature] = raw.split(".");
-    if (isProfileId(profileId) && signature) return { kind: "profile", profileId, signature };
+    if (isProfileId(profileId) && signature) return { profileId, signature };
   }
-  if (jar.get(GUEST_COOKIE)?.value === "1") return { kind: "guest" };
   return null;
 }
 
@@ -70,21 +67,11 @@ export async function writeProfileSession(profileId: string, passwordHash: strin
     ...baseOptions,
     maxAge: ONE_YEAR_IN_SECONDS,
   });
-  jar.delete(GUEST_COOKIE);
-  jar.delete(LEGACY_COOKIE);
-}
-
-/** Sem `maxAge`: a visita acaba quando o navegador fecha. */
-export async function writeGuestSession(): Promise<void> {
-  const jar = await cookies();
-  jar.set(GUEST_COOKIE, "1", baseOptions);
-  jar.delete(PROFILE_COOKIE);
-  jar.delete(LEGACY_COOKIE);
+  for (const name of LEGACY_COOKIES) jar.delete(name);
 }
 
 export async function clearSession(): Promise<void> {
   const jar = await cookies();
   jar.delete(PROFILE_COOKIE);
-  jar.delete(GUEST_COOKIE);
-  jar.delete(LEGACY_COOKIE);
+  for (const name of LEGACY_COOKIES) jar.delete(name);
 }

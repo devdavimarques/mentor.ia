@@ -92,9 +92,9 @@ da senha, com chave derivada da `SUPABASE_SERVICE_ROLE_KEY` ([`lib/session.ts`](
 Ninguém monta o cookie à mão a partir do id, e **trocar a senha encerra as sessões abertas** do
 perfil. Toda requisição confere a assinatura com o hash atual.
 
-**Visitante.** "Entrar como visitante" abre um ciclo de exemplo, gerado na hora, em que dá para
-mexer em tudo — mas nada é enviado ao servidor, e recarregar a página volta ao início. Não é só
-a interface: toda Server Action de gravação exige um perfil autenticado, e visitante não é um.
+**Só perfis do banco.** Não há cadastro nem modo visitante: entra apenas quem tem perfil com
+senha criado direto no banco (`npm run db:seed` e `npm run db:password`). Toda página e toda
+Server Action exigem a sessão assinada de um perfil.
 
 O que **é** garantido: o progresso de cada perfil é isolado no banco. Toda tabela de registro
 tem `profile_id` e toda leitura e escrita filtra por ele, então marcar algo num perfil nunca
@@ -157,6 +157,12 @@ flashcards      profile_id, subject_id,        Flashcards e o agendamento da
   tópico, por matéria e no total. Não entram no progresso, mas guiam as revisões: matéria com
   tópico de **acerto abaixo de 60%** (com 5+ questões) tem prioridade nos blocos de revisão. A
   aba Progresso lista os 5 piores acertos em "Tópicos para reforçar".
+- **Questões e materiais da planilha** ([`lib/topic-resources.ts`](lib/topic-resources.ts), gerado
+  da "Planilha de Estudos PMBA (Hub)"): cada tópico tem o link de questões no **QConcursos** (já
+  filtrado por banca e assunto) e, quando há, o **material** de apoio no Drive. Aparecem nas aulas
+  ("Questões" e "Material", da linha da planilha que corresponde à aula), nos blocos de revisão e
+  nos tópicos da aba Matérias. A meta é de **10 questões por tópico** (`QUESTION_GOAL`): cada aula e
+  cada tópico mostram quantas já foram feitas.
 - **Prova:** com a data definida em Configurar, a aba Hoje mostra quantos dias faltam e compara
   com a previsão de fim do ciclo. Se não fecha, testa até 8 blocos de teoria por dia com a mesma função que
   regera a semana (`examOutlook`, em [`lib/cycle.ts`](lib/cycle.ts)) e diz com quantos fecha.

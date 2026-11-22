@@ -12,12 +12,10 @@ interface AppHeaderProps {
   saving: boolean;
   /** Navegação das abas ao lado da marca, só a partir de `lg` (no celular ela fica no rodapé). */
   nav: React.ReactNode;
-  /** Visitante: o botão do perfil vira "sair do modo visitante". */
-  guest?: boolean;
 }
 
-export function AppHeader({ profile, saving, nav, guest = false }: AppHeaderProps) {
-  const exitLabel = guest ? "Sair do modo visitante" : "Trocar de perfil";
+export function AppHeader({ profile, saving, nav }: AppHeaderProps) {
+  const exitLabel = "Trocar de perfil";
   return (
     <header className="border-line flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b px-4 py-4 sm:px-6">
       <Logo size={30} className="text-lg" />

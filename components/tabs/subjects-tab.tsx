@@ -4,6 +4,7 @@ import { Check, ChevronDown, Link2, Pencil, PlayCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { useLessonLinks } from "@/components/lesson-links-context";
+import { QuestionGoal, ResourceLinks } from "@/components/resource-links";
 import { QuestionPanel } from "@/components/question-panel";
 import { useQuestions } from "@/components/questions-context";
 import { getSubjectIcon } from "@/components/subject-icon";
@@ -20,6 +21,7 @@ import {
   type StudiedMap,
 } from "@/lib/progress";
 import { topicQuestionStats } from "@/lib/questions";
+import { topicResources } from "@/lib/resources";
 import { lessonPosition, SUBJECTS, topicCode } from "@/lib/subjects";
 import type { Subject } from "@/lib/types";
 
@@ -148,7 +150,9 @@ function TopicRow({ subject, topicIndex, studiedOn, lessons, manual, onToggle }:
                 {lessons.done}/{lessons.total} aula{lessons.total > 1 ? "s" : ""}
                 {studiedOn && <> · estudado em {formatShortDate(fromIsoDate(studiedOn))}</>}
               </span>
+              {subject.group !== "redacao" && <QuestionGoal subjectId={subject.id} topicIndex={topicIndex} />}
             </span>
+            <TopicResourceLinks subjectId={subject.id} topicIndex={topicIndex} />
           </span>
         </div>
 
@@ -336,5 +340,21 @@ function LessonLinkRow({ subjectId, lessonIndex, title, part }: LessonLinkRowPro
         </form>
       )}
     </li>
+  );
+}
+
+/** Links da planilha de estudos do tópico; com mais de um assunto, cada um leva o nome. */
+function TopicResourceLinks({ subjectId, topicIndex }: { subjectId: string; topicIndex: number }) {
+  const resources = topicResources(subjectId, topicIndex).filter((r) => r.questions || r.material);
+  if (resources.length === 0) return null;
+  return (
+    <span className="mt-1.5 flex flex-col gap-1 text-xs">
+      {resources.map((r) => (
+        <span key={r.name} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {resources.length > 1 && <span className="text-muted min-w-0 truncate">{r.name}</span>}
+          <ResourceLinks resource={r} />
+        </span>
+      ))}
+    </span>
   );
 }

@@ -6,11 +6,13 @@ import { useState } from "react";
 import { useLessonLinks } from "@/components/lesson-links-context";
 import { useNextLessons } from "@/components/lesson-order-context";
 import { QuestionPanel } from "@/components/question-panel";
+import { QuestionGoal, ResourceLinks } from "@/components/resource-links";
 import { useQuestions } from "@/components/questions-context";
 import { TimerButton } from "@/components/study-timer";
 import { HotTag, Tag } from "@/components/ui/tag";
 import { lessonLinkKey } from "@/lib/lesson-links";
 import { topicQuestionStats } from "@/lib/questions";
+import { lessonResource, topicResources } from "@/lib/resources";
 import { daysBetween, REVIEW_INTERVALS, type ReviewBlock } from "@/lib/reviews";
 import { sequenceIndex } from "@/lib/schedule";
 import { findSubject, lessonPosition, topicCode } from "@/lib/subjects";
@@ -263,6 +265,17 @@ export function ReviewBlockCard({ block, todayDate, onToggle }: ReviewBlockCardP
             </Tag>
           ))}
           {block.early && <Tag tone="accent">adiantada</Tag>}
+          {/* Questões do QConcursos de cada tópico do bloco: revisar é bom momento para fazer as 10. */}
+          {block.items.slice(0, 3).map((i) => {
+            const first = topicResources(subject.id, i.topicIndex).find((r) => r.questions);
+            return first ? (
+              <ResourceLinks
+                key={i.topicIndex}
+                resource={{ ...first, material: null }}
+                label={block.items.length > 1 ? topicCode(subject, i.topicIndex) : undefined}
+              />
+            ) : null;
+          })}
           {!block.done && <TimerButton subjectId={subject.id} lessonIndex={null} label="Revisão" />}
           {late > 0 && (
             <span className="text-accent-text font-semibold">
@@ -304,6 +317,7 @@ export function LessonBlock({ block, checked, onToggle, tags, kind }: LessonBloc
 
   const position = lessonPosition(subject, block.lessonIndex);
   const link = links[lessonLinkKey(subject.id, block.lessonIndex)];
+  const resource = lessonResource(subject.id, block.lessonIndex);
   const topicNames = lesson.topics.map((t) => subject.topics[t]).join(" · ");
   const title = lesson.selfStudy
     ? lesson.title
@@ -345,6 +359,10 @@ export function LessonBlock({ block, checked, onToggle, tags, kind }: LessonBloc
               <PlayCircle size={13} aria-hidden />
               Abrir aula
             </a>
+          )}
+          {resource && <ResourceLinks resource={resource} />}
+          {subject.group !== "redacao" && (
+            <QuestionGoal subjectId={subject.id} topicIndex={lesson.topics[0]} />
           )}
           {!checked && <TimerButton subjectId={subject.id} lessonIndex={block.lessonIndex} />}
         </>

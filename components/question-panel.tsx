@@ -8,6 +8,7 @@ import { formatShortDate, fromIsoDate } from "@/lib/date";
 import {
   MAX_QUESTIONS_PER_LOG,
   PENDING_ID_PREFIX,
+  QUESTION_GOAL,
   questionLogError,
   questionStats,
 } from "@/lib/questions";
@@ -58,8 +59,10 @@ export function QuestionPanel({ subjectId, topicIndex }: QuestionPanelProps) {
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-muted text-xs font-medium tabular-nums">
         {stats.pct === null
-          ? "Nenhuma questão lançada neste tópico."
-          : `${stats.answered} feitas · ${stats.correct} certas · ${stats.pct}% de acerto`}
+          ? `Nenhuma questão lançada neste tópico. Meta: ${QUESTION_GOAL}.`
+          : `${stats.answered} feitas · ${stats.correct} certas · ${stats.pct}% de acerto · ${
+              stats.answered >= QUESTION_GOAL ? "meta cumprida" : `faltam ${QUESTION_GOAL - stats.answered} para a meta de ${QUESTION_GOAL}`
+            }`}
       </p>
 
       <form onSubmit={submit} className="flex flex-wrap items-end gap-2" noValidate>
