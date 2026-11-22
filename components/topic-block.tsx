@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useLessonLinks } from "@/components/lesson-links-context";
 import { useNextLessons } from "@/components/lesson-order-context";
 import { QuestionPanel } from "@/components/question-panel";
-import { DownloadLink, QuestionGoal, ResourceLinks } from "@/components/resource-links";
+import { QuestionGoal, ResourceLinks } from "@/components/resource-links";
 import { useQuestions } from "@/components/questions-context";
 import { TimerButton } from "@/components/study-timer";
 import { HotTag, Tag } from "@/components/ui/tag";
@@ -363,7 +363,6 @@ export function LessonBlock({ block, checked, onToggle, tags, kind }: LessonBloc
               Abrir aula
             </a>
           )}
-          {link && <DownloadLink url={link} label={`Baixar a aula: ${title}`} />}
           {resource && <ResourceLinks resource={resource} />}
           {/* A meta diária é dos blocos de hoje: só aparece na aba Hoje (onde o cartão tem tipo). */}
           {kind && subject.group !== "redacao" && (

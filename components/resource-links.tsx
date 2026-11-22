@@ -1,21 +1,23 @@
 "use client";
 
-import { Check, Download, FileText, ListChecks } from "lucide-react";
+import { Check, FileText, ListChecks } from "lucide-react";
 
 import { useQuestions } from "@/components/questions-context";
 import { QUESTION_GOAL, questionsToday } from "@/lib/questions";
-import { downloadUrl, type TopicResource } from "@/lib/resources";
+import { materialHref, type TopicResource } from "@/lib/resources";
 
 const linkClass = "text-accent-text hover:text-ink flex items-center gap-1 font-semibold";
 
 /**
  * Links da planilha de estudos para um assunto: questões no QConcursos e o
- * material de apoio no Drive. `label` distingue assuntos quando o tópico tem
- * mais de um (ex.: "Questões · Remédios Constitucionais").
+ * material de apoio, que baixa direto pelo app (sem passar pelo Drive).
+ * `label` distingue assuntos quando o tópico tem mais de um (ex.:
+ * "Questões · Remédios Constitucionais").
  */
 export function ResourceLinks({ resource, label }: { resource: TopicResource; label?: string }) {
   if (!resource.questions && !resource.material) return null;
   const suffix = label ? ` · ${label}` : "";
+  const material = materialHref(resource);
   return (
     <>
       {resource.questions && (
@@ -30,32 +32,27 @@ export function ResourceLinks({ resource, label }: { resource: TopicResource; la
           Questões{suffix}
         </a>
       )}
-      {resource.material && (
-        <a
-          href={resource.material}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={`Material de apoio: ${resource.name}`}
-          className={linkClass}
-        >
-          <FileText size={13} aria-hidden />
-          Material{suffix}
-        </a>
-      )}
-      {resource.material && <DownloadLink url={resource.material} label={`Baixar material: ${resource.name}`} />}
+      {material &&
+        (material.download ? (
+          // Baixa pelo servidor do app: sem registro no Drive.
+          <a href={material.href} download title={`Baixar o material: ${resource.name}`} className={linkClass}>
+            <FileText size={13} aria-hidden />
+            Material{suffix}
+          </a>
+        ) : (
+          // Pasta do Drive: não tem download direto, abre no Drive.
+          <a
+            href={material.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Material de apoio (pasta no Drive): ${resource.name}`}
+            className={linkClass}
+          >
+            <FileText size={13} aria-hidden />
+            Material{suffix}
+          </a>
+        ))}
     </>
-  );
-}
-
-/** "Baixar": o arquivo do Drive direto, sem abrir a página dele. Nada para pasta. */
-export function DownloadLink({ url, label }: { url: string; label: string }) {
-  const href = downloadUrl(url);
-  if (!href) return null;
-  return (
-    <a href={href} rel="noopener noreferrer" title={label} aria-label={label} className={linkClass}>
-      <Download size={13} aria-hidden />
-      Baixar
-    </a>
   );
 }
 
